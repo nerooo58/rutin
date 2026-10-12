@@ -77,6 +77,27 @@ data class CategoryItem(
 @IgnoreExtraProperties
 data class SettingsData(
     val notificationsEnabled: Boolean = true,
+    val reminderMinutes: Int = 5,
     val theme: String = "dark",
     val lastSync: Timestamp? = null
 )
+
+@IgnoreExtraProperties
+data class UserStats(
+    val todayCompleted: Int = 0,
+    val todayTotal: Int = 0,
+    val todayPercent: Int = 0,
+    val currentStreak: Int = 0,
+    val bestStreak: Int = 0,
+    val weeklyCompleted: Int = 0,
+    val weeklyTotal: Int = 0,
+    val weeklyPercent: Int = 0,
+    val monthlyCompleted: Int = 0,
+    val monthlyTotal: Int = 0,
+    val monthlyPercent: Int = 0,
+    val yearlyCompleted: Int = 0,
+    val yearlyTotal: Int = 0,
+    val yearlyPercent: Int = 0,
+    val lastUpdated: Timestamp? = null
+)
+

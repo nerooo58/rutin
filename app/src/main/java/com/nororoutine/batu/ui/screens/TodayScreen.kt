@@ -1,6 +1,8 @@
 package com.nororoutine.batu.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -10,6 +12,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,9 +43,12 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Thermostat
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -51,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,14 +67,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -73,37 +81,39 @@ import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineStatus
 import com.nororoutine.batu.ui.components.PulsingDot
 import com.nororoutine.batu.ui.components.RoutineDetailBottomSheet
+import com.nororoutine.batu.ui.components.TodayRoutinesBottomSheet
 import com.nororoutine.batu.ui.components.shake
 import com.nororoutine.batu.ui.components.springPress
 import com.nororoutine.batu.ui.illustrations.RoutineIllustration
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
-import com.nororoutine.batu.ui.theme.ActiveBannerBg
-import com.nororoutine.batu.ui.theme.ActiveBannerBorder
-import com.nororoutine.batu.ui.theme.DoneCardBg
-import com.nororoutine.batu.ui.theme.DoneCardBorder
 import com.nororoutine.batu.ui.theme.DoneGreen
-import com.nororoutine.batu.ui.theme.GlassCardBackground
 import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
-import com.nororoutine.batu.ui.theme.MissedCardBg
-import com.nororoutine.batu.ui.theme.MissedCardBorder
 import com.nororoutine.batu.ui.theme.MissedRed
 import com.nororoutine.batu.ui.theme.MutedWhite
 import com.nororoutine.batu.ui.theme.PureWhite
-import com.nororoutine.batu.ui.theme.PurpleGradientStart
 import com.nororoutine.batu.ui.theme.SubtitleWhite
 import com.nororoutine.batu.viewmodel.RutinUiState
 import com.nororoutine.batu.viewmodel.RutinViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
-enum class TodayDisplayMode {
-    CAROUSEL,
-    WEATHER_IDLE
+/**
+ * Three distinct UI states for TodayScreen:
+ * STATE 1 - IDLE: No active or approaching routine.
+ * STATE 2 - APPROACHING: 15 min before a routine starts. Header shrinks to compact top bar. Routine card centered with countdown.
+ * STATE 3 - ACTIVE: Routine time has started, or inside a time range. Elapsed/remaining time. If another approaches, banner slides up.
+ */
+enum class MainViewState {
+    IDLE,
+    APPROACHING,
+    ACTIVE
 }
 
 @Composable
@@ -115,14 +125,20 @@ fun TodayScreen(
 ) {
     val context = LocalContext.current
     val today = remember { LocalDate.now() }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val turkishLocale = remember { Locale("tr", "TR") }
 
-    val formattedDate = remember(today) {
-        val day = today.dayOfMonth
-        val month = today.format(DateTimeFormatter.ofPattern("MMMM", turkishLocale))
-        val dayOfWeek = today.format(DateTimeFormatter.ofPattern("EEEE", turkishLocale))
-        "$day $month $dayOfWeek"
+    // Real-time ticking clock for exact countdown updates
+    var currentTimeMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            currentTimeMillis = System.currentTimeMillis()
+        }
     }
+
+    val nowLocalTime = remember(currentTimeMillis) { LocalTime.now() }
 
     // Fetch weather on launch
     LaunchedEffect(Unit) {
@@ -131,236 +147,252 @@ fun TodayScreen(
 
     val todayRoutines = viewModel.getRoutinesForDay(today)
     val totalCount = todayRoutines.size
-    val completedCount = todayRoutines.count {
-        viewModel.getRoutineStatus(it, today) == RoutineStatus.DONE
+    val todayDateStr = remember(today) { today.format(DateTimeFormatter.ISO_LOCAL_DATE) }
+    val completedCount = todayRoutines.count { routine ->
+        uiState.logs["${todayDateStr}_${routine.id}"]?.isDone == true
+    }
+    val todayPercent = if (totalCount > 0) ((completedCount * 100) / totalCount).coerceIn(0, 100) else 0
+    val currentStreak = uiState.stats.currentStreak
+
+    // Determine state 1, 2, or 3 based on active or approaching routine
+    // Active routine: routine whose scheduled time has started / inside range, and not marked done/missed
+    val activeRoutine = todayRoutines.find { routine ->
+        val status = viewModel.getRoutineStatus(routine, today)
+        status == RoutineStatus.ACTIVE
     }
 
-    val activeRoutine = todayRoutines.find {
-        viewModel.getRoutineStatus(it, today) == RoutineStatus.ACTIVE
+    // Approaching routine: within 15 min before start time, not done/missed
+    val approachingRoutine = todayRoutines.find { routine ->
+        val logKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${routine.id}"
+        val isDoneOrMissed = uiState.logs[logKey] != null
+        if (isDoneOrMissed) return@find false
+
+        val start = try {
+            LocalTime.parse(routine.startTime.ifEmpty { routine.time })
+        } catch (e: Exception) {
+            LocalTime.of(8, 0)
+        }
+        val diffSeconds = Duration.between(nowLocalTime, start).seconds
+        diffSeconds in 1..900 // 0 to 15 minutes before start
     }
 
-    // Determine initial display mode:
-    // If no active routine right now, show weather/time idle state by default
-    var displayMode by remember(activeRoutine, todayRoutines.size) {
-        mutableStateOf(
-            if (activeRoutine != null) TodayDisplayMode.CAROUSEL else TodayDisplayMode.WEATHER_IDLE
-        )
+    // Determine the main view state
+    val mainViewState = remember(activeRoutine, approachingRoutine) {
+        when {
+            activeRoutine != null -> MainViewState.ACTIVE
+            approachingRoutine != null -> MainViewState.APPROACHING
+            else -> MainViewState.IDLE
+        }
     }
 
-    // Carousel focused index
-    val initialFocusedIndex = remember(activeRoutine, todayRoutines) {
+    // If active routine is present, check if ANOTHER routine is approaching (within 15 min)
+    val nextApproachingWhileActive = remember(activeRoutine, approachingRoutine, todayRoutines, nowLocalTime) {
         if (activeRoutine != null) {
-            val idx = todayRoutines.indexOfFirst { it.id == activeRoutine.id }
-            if (idx >= 0) idx else 0
-        } else 0
+            todayRoutines.find { routine ->
+                if (routine.id == activeRoutine.id) return@find false
+                val logKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${routine.id}"
+                val isDoneOrMissed = uiState.logs[logKey] != null
+                if (isDoneOrMissed) return@find false
+
+                val start = try {
+                    LocalTime.parse(routine.startTime.ifEmpty { routine.time })
+                } catch (e: Exception) {
+                    LocalTime.of(8, 0)
+                }
+                val diffSeconds = Duration.between(nowLocalTime, start).seconds
+                diffSeconds in 1..900
+            }
+        } else null
     }
-    var focusedIndex by remember(todayRoutines.size) { mutableIntStateOf(initialFocusedIndex) }
+
+    // Routine list for carousel: in STATE 2/3, prioritize the active/approaching routine
+    val targetRoutine = activeRoutine ?: approachingRoutine ?: todayRoutines.firstOrNull()
+
+    var focusedIndex by remember(targetRoutine?.id, todayRoutines.size) {
+        val idx = if (targetRoutine != null) todayRoutines.indexOfFirst { it.id == targetRoutine.id } else 0
+        mutableIntStateOf(if (idx >= 0) idx else 0)
+    }
 
     var selectedRoutineForSheet by remember { mutableStateOf<Routine?>(null) }
+    var showTodayRoutinesSheet by remember { mutableStateOf(false) }
+
+    val formattedDateFull = remember(today) {
+        val day = today.dayOfMonth
+        val month = today.format(DateTimeFormatter.ofPattern("MMMM", turkishLocale))
+        val year = today.year
+        val dayOfWeek = today.format(DateTimeFormatter.ofPattern("EEEE", turkishLocale))
+        "$dayOfWeek, $day $month $year"
+    }
+
+    val locationText = remember(uiState.weatherInfo.district, uiState.weatherInfo.city) {
+        when {
+            uiState.weatherInfo.district.isNotEmpty() && uiState.weatherInfo.city.isNotEmpty() ->
+                "${uiState.weatherInfo.district}, ${uiState.weatherInfo.city}"
+            uiState.weatherInfo.city.isNotEmpty() -> uiState.weatherInfo.city
+            uiState.weatherInfo.district.isNotEmpty() -> uiState.weatherInfo.district
+            else -> "Konum alınıyor..."
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 20.dp)
-        ) {
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Header: NORO badge, Date, and Mode Toggle
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // NORO Indicator
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0x1F7CF4DE))
-                        .border(1.dp, Color(0x337CF4DE), RoundedCornerShape(999.dp))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                ) {
-                    PulsingDot(color = AccentTeal, dotSize = 7.dp, pulseMaxScale = 2.2f)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "NORO",
-                        color = PureWhite,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                    )
-                }
-
-                // Date & Mode Switcher
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = formattedDate,
-                        color = MutedWhite,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    if (totalCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = {
-                                displayMode = if (displayMode == TodayDisplayMode.CAROUSEL) {
-                                    TodayDisplayMode.WEATHER_IDLE
-                                } else {
-                                    TodayDisplayMode.CAROUSEL
-                                }
-                            },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(if (displayMode == TodayDisplayMode.WEATHER_IDLE) Color(0x337CF4DE) else Color(0x22FFFFFF))
-                        ) {
-                            Icon(
-                                imageVector = if (displayMode == TodayDisplayMode.CAROUSEL) Icons.Rounded.Thermostat else Icons.Rounded.ViewCarousel,
-                                contentDescription = "Mod Değiştir",
-                                tint = if (displayMode == TodayDisplayMode.WEATHER_IDLE) AccentTeal else PureWhite,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Main View Area: Animated between Carousel Stack and Weather Idle
-            AnimatedContent(
-                targetState = displayMode,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "todayMode"
-            ) { mode ->
-                if (mode == TodayDisplayMode.WEATHER_IDLE || totalCount == 0) {
+        if (isLandscape) {
+            // LANDSCAPE (tablet) layout:
+            // Left side: time/date/weather info
+            // Right side: routine card
+            // "Günün Rutinleri" count pill next to weather info on the right
+            LandscapeTodayLayout(
+                mainViewState = mainViewState,
+                nowTime = nowLocalTime,
+                dateText = formattedDateFull,
+                uiState = uiState,
+                locationText = locationText,
+                totalTodayRoutines = totalCount,
+                completedTodayRoutines = completedCount,
+                todayPercent = todayPercent,
+                currentStreak = currentStreak,
+                focusedRoutine = todayRoutines.getOrNull(focusedIndex),
+                viewModel = viewModel,
+                today = today,
+                onViewRoutinesClick = { showTodayRoutinesSheet = true },
+                onToggleRoutine = { routine -> viewModel.toggleRoutineStatus(routine.id, today) },
+                onOpenNote = { routine -> selectedRoutineForSheet = routine }
+            )
+        } else {
+            // PORTRAIT (phone) layout:
+            when (mainViewState) {
+                MainViewState.IDLE -> {
+                    // STATE 1 - IDLE:
+                    // - Large clock in center showing current time
+                    // - Date below: "Pazartesi, 12 Ekim 2026"
+                    // - Weather illustration (SVG) centered
+                    // - Temperature + weather condition + city/district name below illustration
+                    // - "İyi Akşamlar" style greeting at top based on time of day
+                    // - Bottom: compact "Günün Rutinleri (X)" pill button -> opens bottom sheet
                     WeatherIdleScreen(
                         weatherInfo = uiState.weatherInfo,
                         onRefreshWeather = { viewModel.fetchWeather(context) },
                         totalTodayRoutines = totalCount,
+                        completedTodayRoutines = completedCount,
+                        todayPercent = todayPercent,
+                        currentStreak = currentStreak,
                         onViewRoutinesClick = {
                             if (totalCount > 0) {
-                                displayMode = TodayDisplayMode.CAROUSEL
+                                showTodayRoutinesSheet = true
                             } else {
                                 onNavigateToEdit()
                             }
                         }
                     )
-                } else {
-                    // Vertical Card Stack / Carousel View
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // Title & Progress Bar
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Günün rutinleri",
-                                    color = PureWhite,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.5).sp
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$completedCount/$totalCount tamamlandı",
-                                    color = AccentTeal,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
+                }
 
-                            // Switch to weather button
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(Color(0x221E3250))
-                                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(999.dp))
-                                    .clickable { displayMode = TodayDisplayMode.WEATHER_IDLE }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Thermostat,
-                                        contentDescription = null,
-                                        tint = AccentTeal,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "${uiState.weatherInfo.temperature.toInt()}°C",
-                                        color = PureWhite,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                MainViewState.APPROACHING, MainViewState.ACTIVE -> {
+                    // STATE 2 (APPROACHING) & STATE 3 (ACTIVE):
+                    // - Top bar: compact time + date + weather info in one small row
+                    // - Weather illustration disappears
+                    // - Center: large routine card with illustration, name, countdown
+                    // - Countdown: 15 min before countdown to start; inside active counts up or remaining
+                    // - Bottom: "Günün Rutinleri" pill
+                    PortraitActiveApproachingLayout(
+                        state = mainViewState,
+                        nowTime = nowLocalTime,
+                        routines = todayRoutines,
+                        focusedIndex = focusedIndex,
+                        onFocusChange = { focusedIndex = it },
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        today = today,
+                        locationText = locationText,
+                        totalCount = totalCount,
+                        completedCount = completedCount,
+                        todayPercent = todayPercent,
+                        currentStreak = currentStreak,
+                        onViewRoutinesClick = { showTodayRoutinesSheet = true },
+                        onToggleRoutine = { routine -> viewModel.toggleRoutineStatus(routine.id, today) },
+                        onOpenNote = { routine -> selectedRoutineForSheet = routine }
+                    )
+                }
+            }
+        }
+
+        // Small banner slides up from bottom if ANOTHER routine is approaching (within 15 min) while STATE 3 is active
+        AnimatedVisibility(
+            visible = (mainViewState == MainViewState.ACTIVE && nextApproachingWhileActive != null),
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 74.dp, start = 20.dp, end = 20.dp)
+        ) {
+            nextApproachingWhileActive?.let { approaching ->
+                val start = try {
+                    LocalTime.parse(approaching.startTime.ifEmpty { approaching.time })
+                } catch (e: Exception) {
+                    LocalTime.of(8, 0)
+                }
+                val minLeft = Duration.between(nowLocalTime, start).toMinutes().coerceAtLeast(1)
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xF21C1635))
+                        .border(1.5.dp, AccentPurple, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.NotificationsActive,
+                                contentDescription = null,
+                                tint = AccentTeal,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Sıradaki: ${approaching.name} — $minLeft dk",
+                                color = PureWhite,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Progress Bar
-                        val progressTarget = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
-                        val animatedProgress by animateFloatAsState(
-                            targetValue = progressTarget,
-                            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing),
-                            label = "prog"
-                        )
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0x22FFFFFF))
+                                .background(Color(0x33A78BFA))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
-                            if (animatedProgress > 0f) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(animatedProgress)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(999.dp))
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(PurpleGradientStart, AccentTeal)
-                                            )
-                                        )
-                                )
-                            }
+                            Text(
+                                text = approaching.startTime,
+                                color = AccentPurple,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Vertical Card Stack Carousel
-                        VerticalRoutineCardStack(
-                            routines = todayRoutines,
-                            focusedIndex = focusedIndex,
-                            viewModel = viewModel,
-                            uiState = uiState,
-                            today = today,
-                            onFocusChange = { newIdx ->
-                                focusedIndex = newIdx.coerceIn(0, todayRoutines.lastIndex)
-                            },
-                            onToggleStatus = { routine ->
-                                viewModel.toggleRoutineStatus(routine.id, today)
-                            },
-                            onOpenDetail = { routine ->
-                                selectedRoutineForSheet = routine
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                        )
                     }
                 }
             }
+        }
+
+        // Today's Routines Bottom Sheet (opened from compact pill button)
+        if (showTodayRoutinesSheet) {
+            TodayRoutinesBottomSheet(
+                routines = todayRoutines,
+                today = today,
+                getStatus = { viewModel.getRoutineStatus(it, today) },
+                onToggleStatus = { routine ->
+                    viewModel.toggleRoutineStatus(routine.id, today)
+                },
+                onOpenNote = { routine ->
+                    selectedRoutineForSheet = routine
+                },
+                onNavigateToEdit = onNavigateToEdit,
+                onDismiss = { showTodayRoutinesSheet = false }
+            )
         }
 
         // Note / Journal Bottom Sheet
@@ -387,12 +419,420 @@ fun TodayScreen(
 }
 
 /**
- * Vertical Card Stack / Carousel with 3D perspective stacking and swipe gesture.
+ * PORTRAIT Layout for STATE 2 (Approaching) & STATE 3 (Active)
+ */
+@Composable
+fun PortraitActiveApproachingLayout(
+    state: MainViewState,
+    nowTime: LocalTime,
+    routines: List<Routine>,
+    focusedIndex: Int,
+    onFocusChange: (Int) -> Unit,
+    uiState: RutinUiState,
+    viewModel: RutinViewModel,
+    today: LocalDate,
+    locationText: String,
+    totalCount: Int,
+    completedCount: Int,
+    todayPercent: Int,
+    currentStreak: Int,
+    onViewRoutinesClick: () -> Unit,
+    onToggleRoutine: (Routine) -> Unit,
+    onOpenNote: (Routine) -> Unit
+) {
+    val turkishLocale = remember { Locale("tr", "TR") }
+    val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
+    val formattedDateShort = remember(today) {
+        val d = today.dayOfMonth
+        val m = today.format(DateTimeFormatter.ofPattern("MMM", turkishLocale))
+        "$d $m"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Compact Top Bar: small clock, date, temp, city — all compact in one row
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xF2141F33)) // Solid glass bar
+                .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(999.dp))
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Clock & Date
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = formattedTime,
+                        color = PureWhite,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "•",
+                        color = MutedWhite,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = formattedDateShort,
+                        color = SubtitleWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Temp & Location
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Thermostat,
+                        contentDescription = null,
+                        tint = AccentTeal,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = "${uiState.weatherInfo.temperature.toInt()}°C",
+                        color = PureWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.LocationOn,
+                        contentDescription = null,
+                        tint = AccentPurple,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = locationText.take(16),
+                        color = SubtitleWhite,
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // State indicator pill
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (state == MainViewState.ACTIVE) Color(0x3310B981) else Color(0x33A78BFA))
+                .border(1.dp, if (state == MainViewState.ACTIVE) DoneGreen else AccentPurple, RoundedCornerShape(999.dp))
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PulsingDot(
+                    color = if (state == MainViewState.ACTIVE) DoneGreen else AccentPurple,
+                    dotSize = 6.dp,
+                    pulseMaxScale = 2.0f
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (state == MainViewState.ACTIVE) "AKTİF RUTİN" else "YAKLAŞAN RUTİN (15 DK İÇİNDE)",
+                    color = PureWhite,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Center: Large routine card with smooth spring physics
+        VerticalRoutineCardStack(
+            routines = routines,
+            focusedIndex = focusedIndex,
+            nowTime = nowTime,
+            mainViewState = state,
+            viewModel = viewModel,
+            uiState = uiState,
+            today = today,
+            onFocusChange = onFocusChange,
+            onToggleStatus = onToggleRoutine,
+            onOpenDetail = onOpenNote,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+        )
+
+        // Bottom: "Günün Rutinleri" pill with completion rate and streak
+        val isAllCompleted = totalCount > 0 && completedCount == totalCount
+        Row(
+            modifier = Modifier.padding(bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (currentStreak > 0) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0x33F59E0B))
+                        .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "🔥 $currentStreak gün",
+                        color = Color(0xFFFBBF24),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            val completionColor = getCompletionColor(todayPercent, totalCount)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (totalCount > 0) completionColor.copy(alpha = 0.22f) else Color(0xF2162035))
+                    .border(1.dp, if (totalCount > 0) completionColor.copy(alpha = 0.75f) else GlassCardBorderSubtle, RoundedCornerShape(999.dp))
+                    .clickable { onViewRoutinesClick() }
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isAllCompleted) Icons.Rounded.Check else Icons.Rounded.ViewCarousel,
+                        contentDescription = null,
+                        tint = if (totalCount > 0) completionColor else AccentTeal,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (totalCount > 0) "Günün Rutinleri: $completedCount/$totalCount (%$todayPercent)" else "Günün Rutinleri (0)",
+                        color = PureWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * LANDSCAPE (tablet) layout for Today screen
+ */
+@Composable
+fun LandscapeTodayLayout(
+    mainViewState: MainViewState,
+    nowTime: LocalTime,
+    dateText: String,
+    uiState: RutinUiState,
+    locationText: String,
+    totalTodayRoutines: Int,
+    completedTodayRoutines: Int,
+    todayPercent: Int,
+    currentStreak: Int,
+    focusedRoutine: Routine?,
+    viewModel: RutinViewModel,
+    today: LocalDate,
+    onViewRoutinesClick: () -> Unit,
+    onToggleRoutine: (Routine) -> Unit,
+    onOpenNote: (Routine) -> Unit
+) {
+    val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Side: Time, Date, Weather info + Routine count pill
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = formattedTime,
+                color = PureWhite,
+                fontSize = 58.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = (-1).sp
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = dateText,
+                color = SubtitleWhite,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Weather Card with Location and Günün Rutinleri Pill
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xF2131D31))
+                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(20.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Thermostat,
+                                contentDescription = null,
+                                tint = AccentTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${uiState.weatherInfo.temperature.toInt()}°C • ${uiState.weatherInfo.condition.label}",
+                                color = PureWhite,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.LocationOn,
+                                contentDescription = null,
+                                tint = AccentPurple,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = locationText,
+                                color = SubtitleWhite,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+
+                    // Routine Count Pill with completion and streak
+                    val isAllDone = totalTodayRoutines > 0 && completedTodayRoutines == totalTodayRoutines
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (currentStreak > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(Color(0x33F59E0B))
+                                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🔥 $currentStreak gün",
+                                    color = Color(0xFFFBBF24),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        val completionColor = getCompletionColor(todayPercent, totalTodayRoutines)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (totalTodayRoutines > 0) completionColor.copy(alpha = 0.22f) else Color(0x33A78BFA))
+                                .border(1.dp, if (totalTodayRoutines > 0) completionColor.copy(alpha = 0.75f) else AccentPurple, RoundedCornerShape(999.dp))
+                                .clickable { onViewRoutinesClick() }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isAllDone) Icons.Rounded.Check else Icons.Rounded.ViewCarousel,
+                                    contentDescription = null,
+                                    tint = if (totalTodayRoutines > 0) completionColor else AccentPurple,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (totalTodayRoutines > 0) "$completedTodayRoutines/$totalTodayRoutines (%$todayPercent)" else "$totalTodayRoutines rutin",
+                                    color = PureWhite,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Right Side: Routine Card
+        Box(
+            modifier = Modifier
+                .weight(1.2f)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (focusedRoutine != null) {
+                val status = viewModel.getRoutineStatus(focusedRoutine, today)
+                CarouselRoutineCard(
+                    routine = focusedRoutine,
+                    status = status,
+                    nowTime = nowTime,
+                    mainViewState = mainViewState,
+                    isCenter = true,
+                    isShaking = false,
+                    shakeTrigger = 0,
+                    onToggle = { onToggleRoutine(focusedRoutine) },
+                    onOpenDetail = { onOpenNote(focusedRoutine) }
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xF2162035))
+                        .padding(28.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Bugün için kayıtlı aktif rutin bulunmuyor.",
+                        color = MutedWhite,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Vertical Card Stack / Carousel with smooth spring drag physics and solid glass cards.
  */
 @Composable
 fun VerticalRoutineCardStack(
     routines: List<Routine>,
     focusedIndex: Int,
+    nowTime: LocalTime,
+    mainViewState: MainViewState,
     viewModel: RutinViewModel,
     uiState: RutinUiState,
     today: LocalDate,
@@ -401,17 +841,18 @@ fun VerticalRoutineCardStack(
     onOpenDetail: (Routine) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var dragAccumulator by remember { mutableStateOf(0f) }
     val scope = rememberCoroutineScope()
+    val dragOffsetAnim = remember { Animatable(0f) }
 
     val draggableState = rememberDraggableState { delta ->
-        dragAccumulator += delta
-        if (dragAccumulator < -60f && focusedIndex < routines.lastIndex) {
-            onFocusChange(focusedIndex + 1)
-            dragAccumulator = 0f
-        } else if (dragAccumulator > 60f && focusedIndex > 0) {
-            onFocusChange(focusedIndex - 1)
-            dragAccumulator = 0f
+        scope.launch {
+            val current = dragOffsetAnim.value + delta
+            val bounded = if ((focusedIndex == 0 && current > 0) || (focusedIndex == routines.lastIndex && current < 0)) {
+                dragOffsetAnim.value + delta * 0.4f
+            } else {
+                current
+            }
+            dragOffsetAnim.snapTo(bounded)
         }
     }
 
@@ -421,11 +862,37 @@ fun VerticalRoutineCardStack(
             .draggable(
                 state = draggableState,
                 orientation = Orientation.Vertical,
-                onDragStopped = { dragAccumulator = 0f }
+                onDragStopped = { velocity ->
+                    scope.launch {
+                        val threshold = 90f
+                        val currentVal = dragOffsetAnim.value
+                        val targetChange = when {
+                            currentVal < -threshold || (velocity < -500f && currentVal < 0) -> 1
+                            currentVal > threshold || (velocity > 500f && currentVal > 0) -> -1
+                            else -> 0
+                        }
+
+                        if (targetChange != 0) {
+                            val newIdx = (focusedIndex + targetChange).coerceIn(0, routines.lastIndex)
+                            if (newIdx != focusedIndex) {
+                                onFocusChange(newIdx)
+                            }
+                        }
+
+                        // Smooth spring glide back to position naturally
+                        dragOffsetAnim.animateTo(
+                            targetValue = 0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )
+                    }
+                }
             ),
         contentAlignment = Alignment.Center
     ) {
-        // Navigation Indicators (Up / Down)
+        // Navigation Indicators
         if (focusedIndex > 0) {
             IconButton(
                 onClick = { onFocusChange(focusedIndex - 1) },
@@ -462,48 +929,65 @@ fun VerticalRoutineCardStack(
             }
         }
 
-        // Render cards in order of distance so active is on top
+        val currentDragOffset = dragOffsetAnim.value
+
         routines.forEachIndexed { index, routine ->
             val delta = index - focusedIndex
             val absDelta = abs(delta)
 
-            // Only display cards within visible window (-2 to 2)
             if (absDelta <= 2) {
                 val status = viewModel.getRoutineStatus(routine, today)
                 val isCenter = delta == 0
-                val zIndexVal = (10 - absDelta).toFloat()
+                val zIndexVal = if (isCenter) 20f else (10 - absDelta).toFloat()
 
-                // Target scale & alpha & translation
+                val baseOffsetY = when {
+                    delta < 0 -> -96.dp * absDelta
+                    delta > 0 -> 96.dp * absDelta
+                    else -> 0.dp
+                }
+
+                val animatedBaseOffsetY by animateFloatAsState(
+                    targetValue = baseOffsetY.value,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "baseOffsetY"
+                )
+
                 val targetScale = when (absDelta) {
                     0 -> 1.0f
                     1 -> 0.88f
                     else -> 0.76f
                 }
+                // Center active card is fully opaque 1.0f!
                 val targetAlpha = when (absDelta) {
                     0 -> 1.0f
-                    1 -> 0.65f
-                    else -> 0.30f
-                }
-                val targetOffsetY = when {
-                    delta < 0 -> -90.dp * absDelta
-                    delta > 0 -> 90.dp * absDelta
-                    else -> 0.dp
+                    1 -> 0.70f
+                    else -> 0.35f
                 }
 
                 val animatedScale by animateFloatAsState(
                     targetValue = targetScale,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
                     label = "cardScale"
                 )
                 val animatedAlpha by animateFloatAsState(
                     targetValue = targetAlpha,
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    animationSpec = spring(
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
                     label = "cardAlpha"
                 )
 
+                val finalOffsetY = (animatedBaseOffsetY.dp + (currentDragOffset * 0.75f).dp)
+
                 Box(
                     modifier = Modifier
-                        .offset(y = targetOffsetY)
+                        .offset(y = finalOffsetY)
                         .zIndex(zIndexVal)
                         .graphicsLayer {
                             scaleX = animatedScale
@@ -519,6 +1003,8 @@ fun VerticalRoutineCardStack(
                     CarouselRoutineCard(
                         routine = routine,
                         status = status,
+                        nowTime = nowTime,
+                        mainViewState = mainViewState,
                         isCenter = isCenter,
                         isShaking = uiState.shakeRoutineId == routine.id,
                         shakeTrigger = uiState.shakeTrigger,
@@ -531,43 +1017,107 @@ fun VerticalRoutineCardStack(
     }
 }
 
+/**
+ * Fully opaque, solid glass Routine Card with countdown timer / elapsed timer calculation
+ */
 @Composable
 fun CarouselRoutineCard(
     routine: Routine,
     status: RoutineStatus,
+    nowTime: LocalTime,
+    mainViewState: MainViewState,
     isCenter: Boolean,
     isShaking: Boolean,
     shakeTrigger: Int,
     onToggle: () -> Unit,
     onOpenDetail: () -> Unit
 ) {
+    val solidActiveCenterBg = Color(0xF2162035) // Deep solid midnight blue glass
+    val solidActiveCenterBorder = AccentPurple
+
     val cardBg by animateColorAsState(
-        targetValue = when (status) {
-            RoutineStatus.DONE -> DoneCardBg
-            RoutineStatus.MISSED -> MissedCardBg
-            RoutineStatus.ACTIVE -> ActiveBannerBg
-            RoutineStatus.UPCOMING -> GlassCardBackground
+        targetValue = when {
+            isCenter -> when (status) {
+                RoutineStatus.DONE -> Color(0xF2122822)
+                RoutineStatus.MISSED -> Color(0xF22B141E)
+                RoutineStatus.ACTIVE -> Color(0xF2201944)
+                RoutineStatus.UPCOMING -> solidActiveCenterBg
+            }
+            else -> when (status) {
+                RoutineStatus.DONE -> Color(0x99122822)
+                RoutineStatus.MISSED -> Color(0x992B141E)
+                RoutineStatus.ACTIVE -> Color(0xAA201944)
+                RoutineStatus.UPCOMING -> Color(0x991E3250)
+            }
         },
         animationSpec = tween(300),
         label = "cBg"
     )
 
     val cardBorder by animateColorAsState(
-        targetValue = when (status) {
-            RoutineStatus.DONE -> DoneCardBorder
-            RoutineStatus.MISSED -> MissedCardBorder
-            RoutineStatus.ACTIVE -> AccentPurple
-            RoutineStatus.UPCOMING -> GlassCardBorderSubtle
+        targetValue = when {
+            isCenter -> when (status) {
+                RoutineStatus.DONE -> DoneGreen
+                RoutineStatus.MISSED -> MissedRed
+                RoutineStatus.ACTIVE -> AccentPurple
+                RoutineStatus.UPCOMING -> solidActiveCenterBorder
+            }
+            else -> when (status) {
+                RoutineStatus.DONE -> DoneGreen.copy(alpha = 0.5f)
+                RoutineStatus.MISSED -> MissedRed.copy(alpha = 0.5f)
+                RoutineStatus.ACTIVE -> AccentPurple.copy(alpha = 0.6f)
+                RoutineStatus.UPCOMING -> GlassCardBorderSubtle
+            }
         },
         animationSpec = tween(300),
         label = "cBorder"
     )
 
-    val titleColor = when (status) {
-        RoutineStatus.DONE -> DoneGreen
-        RoutineStatus.MISSED -> MissedRed
-        RoutineStatus.ACTIVE -> PureWhite
-        RoutineStatus.UPCOMING -> PureWhite.copy(alpha = 0.7f)
+    // Calculate Countdown / Elapsed string
+    val countdownText = remember(nowTime, routine) {
+        val start = try {
+            LocalTime.parse(routine.startTime.ifEmpty { routine.time })
+        } catch (e: Exception) {
+            LocalTime.of(8, 0)
+        }
+
+        if (routine.isRange && !routine.endTime.isNullOrBlank()) {
+            val end = try {
+                LocalTime.parse(routine.endTime)
+            } catch (e: Exception) {
+                start.plusHours(1)
+            }
+
+            if (!nowTime.isBefore(start) && !nowTime.isAfter(end)) {
+                // Inside range: show time remaining until end time
+                val remSeconds = Duration.between(nowTime, end).seconds.coerceAtLeast(0)
+                val mm = remSeconds / 60
+                val ss = remSeconds % 60
+                String.format(Locale.US, "Kalan: %02d:%02d", mm, ss)
+            } else if (nowTime.isBefore(start)) {
+                val toStart = Duration.between(nowTime, start).seconds.coerceAtLeast(0)
+                val mm = toStart / 60
+                val ss = toStart % 60
+                String.format(Locale.US, "Başlamaya: %02d:%02d", mm, ss)
+            } else {
+                "Süre Tamamlandı"
+            }
+        } else {
+            // Single time routine:
+            val diffSec = Duration.between(nowTime, start).seconds
+            if (diffSec > 0) {
+                // Counting down to start time (e.g. 15:00, 14:59...)
+                val mm = diffSec / 60
+                val ss = diffSec % 60
+                String.format(Locale.US, "Geri sayım: %02d:%02d", mm, ss)
+            } else {
+                // Started: counts UP / elapsed time
+                val elapsed = abs(diffSec)
+                val mm = elapsed / 60
+                val ss = elapsed % 60
+                String.format(Locale.US, "Geçen süre: +%02d:%02d", mm, ss)
+            }
+        }
     }
 
     Box(
@@ -583,7 +1133,7 @@ fun CarouselRoutineCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Header Row: Time + Status Badge
+            // Header Row: Time + Category Pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -609,8 +1159,8 @@ fun CarouselRoutineCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0x1FA78BFA))
-                        .border(1.dp, Color(0x33A78BFA), RoundedCornerShape(999.dp))
+                        .background(Color(0x33A78BFA))
+                        .border(1.dp, Color(0x55A78BFA), RoundedCornerShape(999.dp))
                         .padding(horizontal = 9.dp, vertical = 3.dp)
                 ) {
                     Text(
@@ -624,7 +1174,7 @@ fun CarouselRoutineCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Center SVG Illustration (Large on active center card)
+            // Center SVG Illustration
             RoutineIllustration(
                 illustrationId = routine.illustrationId,
                 size = if (isCenter) 110.dp else 70.dp
@@ -635,43 +1185,48 @@ fun CarouselRoutineCard(
             // Routine Title
             Text(
                 text = routine.name,
-                color = titleColor,
+                color = PureWhite,
                 fontSize = if (isCenter) 20.sp else 16.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
 
             if (isCenter) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                // Status text
-                val statusText = when (status) {
-                    RoutineStatus.ACTIVE -> "Şu an Aktif Zaman Dilimi"
-                    RoutineStatus.DONE -> "Tamamlandı ✓"
-                    RoutineStatus.MISSED -> "Kaçırıldı ✕"
-                    RoutineStatus.UPCOMING -> "Yaklaşan Rutin"
+                // Countdown / Elapsed Timer Pill
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0x337CF4DE))
+                        .border(1.dp, AccentTeal.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.Timer,
+                            contentDescription = null,
+                            tint = AccentTeal,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = countdownText,
+                            color = PureWhite,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-                Text(
-                    text = statusText,
-                    color = when (status) {
-                        RoutineStatus.DONE -> DoneGreen
-                        RoutineStatus.MISSED -> MissedRed
-                        RoutineStatus.ACTIVE -> AccentTeal
-                        else -> SubtitleWhite
-                    },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Action Buttons Row (Interactive on center card)
+                // Action Buttons Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Toggle Done / Missed Button
                     Button(
                         onClick = onToggle,
                         modifier = Modifier
@@ -713,7 +1268,6 @@ fun CarouselRoutineCard(
                         )
                     }
 
-                    // Journal / Note Button
                     IconButton(
                         onClick = onOpenDetail,
                         modifier = Modifier

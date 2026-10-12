@@ -10,6 +10,7 @@ import com.nororoutine.batu.model.CategoryItem
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineLog
 import com.nororoutine.batu.model.SettingsData
+import com.nororoutine.batu.model.UserStats
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -23,6 +24,7 @@ class FirestoreRepository {
         private const val COLLECTION_LOGS = "logs"
         private const val COLLECTION_CATEGORIES = "categories"
         private const val COLLECTION_SETTINGS = "settings"
+        private const val COLLECTION_STATS = "stats"
         const val DEFAULT_USER_ID = "user_default"
     }
 
@@ -166,6 +168,36 @@ class FirestoreRepository {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Exception attaching snapshot listener to settings", e)
+        }
+
+        awaitClose { registration?.remove() }
+    }
+
+    /**
+     * Real-time snapshot listener for user stats (streak, daily, weekly, monthly, yearly completions).
+     */
+    fun observeStats(userId: String = DEFAULT_USER_ID): Flow<UserStats?> = callbackFlow {
+        val firestore = db
+        if (firestore == null) {
+            Log.w(TAG, "observeStats: Firestore instance is null, closing stream")
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        var registration: ListenerRegistration? = null
+        try {
+            registration = firestore.collection(COLLECTION_STATS).document(userId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Error observing stats from Firestore", error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null && snapshot.exists()) {
+                        trySend(snapshot.toObject(UserStats::class.java))
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception attaching snapshot listener to stats", e)
         }
 
         awaitClose { registration?.remove() }
@@ -316,6 +348,7 @@ class FirestoreRepository {
         try {
             val payload = hashMapOf<String, Any?>(
                 "notificationsEnabled" to settings.notificationsEnabled,
+                "reminderMinutes" to settings.reminderMinutes,
                 "theme" to settings.theme,
                 "lastSync" to Timestamp.now()
             )
@@ -330,6 +363,48 @@ class FirestoreRepository {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Exception in saveSettings", e)
+        }
+    }
+
+    /**
+     * Save user completion stats and streak to stats collection in Firestore.
+     */
+    fun saveStats(stats: UserStats, userId: String = DEFAULT_USER_ID) {
+        val firestore = db
+        if (firestore == null) {
+            Log.w(TAG, "saveStats: Firestore not available, skipping save")
+            return
+        }
+
+        try {
+            val payload = hashMapOf<String, Any?>(
+                "todayCompleted" to stats.todayCompleted,
+                "todayTotal" to stats.todayTotal,
+                "todayPercent" to stats.todayPercent,
+                "currentStreak" to stats.currentStreak,
+                "bestStreak" to stats.bestStreak,
+                "weeklyCompleted" to stats.weeklyCompleted,
+                "weeklyTotal" to stats.weeklyTotal,
+                "weeklyPercent" to stats.weeklyPercent,
+                "monthlyCompleted" to stats.monthlyCompleted,
+                "monthlyTotal" to stats.monthlyTotal,
+                "monthlyPercent" to stats.monthlyPercent,
+                "yearlyCompleted" to stats.yearlyCompleted,
+                "yearlyTotal" to stats.yearlyTotal,
+                "yearlyPercent" to stats.yearlyPercent,
+                "lastUpdated" to (stats.lastUpdated ?: Timestamp.now())
+            )
+
+            firestore.collection(COLLECTION_STATS).document(userId)
+                .set(payload, SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.d(TAG, "User stats successfully saved to Firestore for $userId")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to save user stats for $userId", e)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in saveStats", e)
         }
     }
 
@@ -358,6 +433,7 @@ class FirestoreRepository {
                 }
                 batch.commit()
             }
+            firestore.collection(COLLECTION_STATS).document(userId).delete()
         } catch (e: Exception) {
             Log.e(TAG, "Exception in resetAllData", e)
         }

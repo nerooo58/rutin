@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,17 +50,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.ui.components.DAY_LABELS
-import com.nororoutine.batu.ui.components.GlassCard
 import com.nororoutine.batu.ui.components.RoutineFormBottomSheet
 import com.nororoutine.batu.ui.components.springPress
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
 import com.nororoutine.batu.ui.theme.GlassCardBackground
-import com.nororoutine.batu.ui.theme.GlassCardBorder
 import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
 import com.nororoutine.batu.ui.theme.MissedRed
 import com.nororoutine.batu.ui.theme.MutedWhite
@@ -336,7 +337,6 @@ fun EditableRoutineCard(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Left: Reorder up/down handles
@@ -371,8 +371,9 @@ fun EditableRoutineCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
+            // Routine Illustration
             com.nororoutine.batu.ui.illustrations.RoutineIllustration(
                 illustrationId = routine.illustrationId,
                 size = 44.dp
@@ -380,58 +381,80 @@ fun EditableRoutineCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Center: Routine Details
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Center Column: Title, Category badge, Time & Day pills (properly layered so no overflow!)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp)
+            ) {
+                // Title (with maxLines and Ellipsis to prevent collision)
+                Text(
+                    text = routine.name,
+                    color = PureWhite,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // Separate Row for Category badge so it never covers or overlaps the title
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0x1FA78BFA))
+                        .border(1.dp, Color(0x33A78BFA), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
                     Text(
-                        text = routine.name,
-                        color = PureWhite,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
+                        text = routine.category,
+                        color = AccentPurple,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Color(0x1FA78BFA))
-                            .border(1.dp, Color(0x33A78BFA), RoundedCornerShape(999.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = routine.category,
-                            color = AccentPurple,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // Time info
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Rounded.Schedule,
                         contentDescription = null,
                         tint = SubtitleWhite,
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = routine.time,
                         color = SubtitleWhite,
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
+                }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                    // Days indicator pills
-                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                        DAY_LABELS.forEach { (dayIndex, label) ->
-                            val isDaySelected = routine.days.contains(label)
+                // Day pills with horizontal scroll so they never get cut off!
+                val dayScrollState = rememberScrollState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(dayScrollState),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    DAY_LABELS.forEach { (_, label) ->
+                        val isDaySelected = routine.days.contains(label)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isDaySelected) Color(0x227CF4DE) else Color(0x11FFFFFF))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
                             Text(
                                 text = label,
-                                color = if (isDaySelected) AccentTeal else Color(0x33FFFFFF),
-                                fontSize = 10.sp,
+                                color = if (isDaySelected) AccentTeal else Color(0x44FFFFFF),
+                                fontSize = 9.sp,
                                 fontWeight = if (isDaySelected) FontWeight.Bold else FontWeight.Normal
                             )
                         }
@@ -440,28 +463,31 @@ fun EditableRoutineCard(
             }
 
             // Right: Edit & Delete buttons
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Edit,
                         contentDescription = "Düzenle",
                         tint = SubtitleWhite,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
 
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Delete,
                         contentDescription = "Sil",
                         tint = MissedRed,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }

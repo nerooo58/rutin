@@ -10,6 +10,7 @@ import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineLog
 import com.nororoutine.batu.model.RoutineStatus
 import com.nororoutine.batu.model.SettingsData
+import com.nororoutine.batu.model.UserStats
 import com.nororoutine.batu.network.WeatherInfo
 import com.nororoutine.batu.network.WeatherService
 import com.nororoutine.batu.notification.NotificationScheduler
@@ -19,15 +20,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 
 data class RutinUiState(
     val routines: List<Routine> = emptyList(),
     val logs: Map<String, RoutineLog> = emptyMap(), // key: "${dateString}_${routineId}"
     val categories: List<String> = listOf("Spor", "Zihin", "Beslenme"),
+    val stats: UserStats = UserStats(),
     val weatherInfo: WeatherInfo = WeatherInfo(),
     val isWeatherLoading: Boolean = false,
     val currentTab: Int = 0, // 0: Bugün, 1: Düzenle, 2: Geçmiş, 3: Ayarlar
@@ -62,6 +66,8 @@ class RutinViewModel(
                         isFirebaseConnected = true
                     )
                 }
+                recalculateAndSaveStats(firestoreRoutines, _uiState.value.logs)
+
                 // Reschedule all active notifications on app launch / data sync
                 try {
                     NotificationScheduler.rescheduleAll(
@@ -85,6 +91,7 @@ class RutinViewModel(
                         isFirebaseConnected = true
                     )
                 }
+                recalculateAndSaveStats(_uiState.value.routines, logsMap)
             }
         }
 
@@ -115,6 +122,7 @@ class RutinViewModel(
                     _uiState.update { state ->
                         state.copy(
                             notificationsEnabled = settings.notificationsEnabled,
+                            reminderMinutes = settings.reminderMinutes,
                             isDarkMode = settings.theme == "dark",
                             lastSyncText = lastSyncStr,
                             isFirebaseConnected = true
@@ -139,6 +147,26 @@ class RutinViewModel(
                 }
             }
         }
+
+        // Real-time synchronization for Stats
+        viewModelScope.launch {
+            repository.observeStats().collect { firestoreStats ->
+                if (firestoreStats != null) {
+                    _uiState.update { state ->
+                        state.copy(stats = firestoreStats)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun recalculateAndSaveStats(
+        routines: List<Routine>,
+        logs: Map<String, RoutineLog>
+    ) {
+        val newStats = calculateStats(routines, logs)
+        _uiState.update { it.copy(stats = newStats) }
+        repository.saveStats(newStats)
     }
 
     fun selectTab(tabIndex: Int) {
@@ -152,9 +180,14 @@ class RutinViewModel(
             val lat = location?.first ?: 41.0082 // Default Istanbul
             val lon = location?.second ?: 28.9784
             val weather = WeatherService.fetchWeather(lat, lon)
+            val geocoded = WeatherService.reverseGeocodeLocation(context, lat, lon)
+            val updatedWeather = weather.copy(
+                district = geocoded.first.ifEmpty { if (location == null) "Kadıköy" else "" },
+                city = geocoded.second.ifEmpty { if (location == null) "İstanbul" else "" }
+            )
             _uiState.update {
                 it.copy(
-                    weatherInfo = weather,
+                    weatherInfo = updatedWeather,
                     isWeatherLoading = false
                 )
             }
@@ -201,13 +234,12 @@ class RutinViewModel(
             orderIndex = _uiState.value.routines.size
         )
 
-        // Optimistic UI update
-        _uiState.update { state ->
-            state.copy(routines = state.routines + newRoutine)
-        }
+        val updatedList = _uiState.value.routines + newRoutine
+        _uiState.update { state -> state.copy(routines = updatedList) }
 
         // Persist immediately to Firestore
         repository.saveRoutine(newRoutine)
+        recalculateAndSaveStats(updatedList, _uiState.value.logs)
 
         // Immediately schedule its notifications
         try {
@@ -254,13 +286,12 @@ class RutinViewModel(
             days = daysList
         )
 
-        _uiState.update { state ->
-            val updatedList = state.routines.map { if (it.id == id) updated else it }
-            state.copy(routines = updatedList)
-        }
+        val updatedList = _uiState.value.routines.map { if (it.id == id) updated else it }
+        _uiState.update { state -> state.copy(routines = updatedList) }
 
         // Persist immediately to Firestore
         repository.saveRoutine(updated)
+        recalculateAndSaveStats(updatedList, _uiState.value.logs)
 
         // Immediately schedule updated notifications
         try {
@@ -280,11 +311,10 @@ class RutinViewModel(
     }
 
     fun deleteRoutine(id: String) {
-        _uiState.update { state ->
-            val updated = state.routines.filter { it.id != id }
-            state.copy(routines = updated)
-        }
+        val updatedList = _uiState.value.routines.filter { it.id != id }
+        _uiState.update { state -> state.copy(routines = updatedList) }
         repository.deleteRoutine(id)
+        recalculateAndSaveStats(updatedList, _uiState.value.logs)
 
         // Immediately cancel its notifications
         try {
@@ -351,9 +381,9 @@ class RutinViewModel(
             completedAt = Timestamp.now()
         )
 
+        val updatedLogs = _uiState.value.logs + (key to updatedLog)
+        val shouldShake = !newIsDone
         _uiState.update { state ->
-            val updatedLogs = state.logs + (key to updatedLog)
-            val shouldShake = !newIsDone
             state.copy(
                 logs = updatedLogs,
                 shakeRoutineId = if (shouldShake) routineId else null,
@@ -363,6 +393,7 @@ class RutinViewModel(
 
         // Persist immediately to Firestore
         repository.saveLog(updatedLog)
+        recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
     }
 
     fun updateRoutineNote(routineId: String, date: LocalDate, note: String) {
@@ -378,13 +409,15 @@ class RutinViewModel(
         )
 
         val updatedLog = currentLog.copy(note = note, completedAt = Timestamp.now())
+        val updatedLogs = _uiState.value.logs + (key to updatedLog)
 
         _uiState.update { state ->
-            state.copy(logs = state.logs + (key to updatedLog))
+            state.copy(logs = updatedLogs)
         }
 
         // Persist immediately to Firestore
         repository.saveLog(updatedLog)
+        recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
     }
 
     fun setSelectedHistoryDate(date: LocalDate) {
@@ -396,6 +429,7 @@ class RutinViewModel(
         repository.saveSettings(
             SettingsData(
                 notificationsEnabled = enabled,
+                reminderMinutes = _uiState.value.reminderMinutes,
                 theme = if (_uiState.value.isDarkMode) "dark" else "light",
                 lastSync = Timestamp.now()
             )
@@ -422,6 +456,14 @@ class RutinViewModel(
 
     fun setReminderMinutes(minutes: Int) {
         _uiState.update { it.copy(reminderMinutes = minutes) }
+        repository.saveSettings(
+            SettingsData(
+                notificationsEnabled = _uiState.value.notificationsEnabled,
+                reminderMinutes = minutes,
+                theme = if (_uiState.value.isDarkMode) "dark" else "light",
+                lastSync = Timestamp.now()
+            )
+        )
     }
 
     fun setDarkMode(enabled: Boolean) {
@@ -429,6 +471,7 @@ class RutinViewModel(
         repository.saveSettings(
             SettingsData(
                 notificationsEnabled = _uiState.value.notificationsEnabled,
+                reminderMinutes = _uiState.value.reminderMinutes,
                 theme = if (enabled) "dark" else "light",
                 lastSync = Timestamp.now()
             )
@@ -440,6 +483,7 @@ class RutinViewModel(
             RutinUiState(
                 routines = emptyList(),
                 logs = emptyMap(),
+                stats = UserStats(),
                 currentTab = 0
             )
         }
@@ -496,5 +540,121 @@ class RutinViewModel(
     fun getRoutinesForDay(date: LocalDate): List<Routine> {
         val dayOfWeekInt = date.dayOfWeek.value // 1 = Monday, 7 = Sunday
         return _uiState.value.routines.filter { it.daysIntSet.contains(dayOfWeekInt) }
+    }
+
+    /**
+     * Calculates dynamic statistics:
+     * - Today's completed and total count (e.g. 4/4) and percentage
+     * - Current active streak and best streak
+     * - Weekly completion count and percentage
+     * - Monthly completion count and percentage
+     * - Yearly completion count and percentage
+     */
+    fun calculateStats(
+        routines: List<Routine> = _uiState.value.routines,
+        logs: Map<String, RoutineLog> = _uiState.value.logs,
+        today: LocalDate = LocalDate.now()
+    ): UserStats {
+        val todayRoutines = routines.filter { it.daysIntSet.contains(today.dayOfWeek.value) }
+        val todayTotal = todayRoutines.size
+        val todayDateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val todayCompleted = todayRoutines.count { routine ->
+            logs["${todayDateStr}_${routine.id}"]?.isDone == true
+        }
+        val todayPercent = if (todayTotal > 0) ((todayCompleted * 100) / todayTotal).coerceIn(0, 100) else 0
+
+        // Streak calculation: check consecutive days backwards
+        var streak = 0
+        val isTodayActive = (todayTotal > 0 && todayCompleted >= todayTotal) || (todayCompleted > 0)
+
+        var checkDate = if (isTodayActive) {
+            streak = 1
+            today.minusDays(1)
+        } else {
+            today.minusDays(1)
+        }
+
+        var dayCount = 0
+        while (dayCount < 365) {
+            val pastRoutines = routines.filter { it.daysIntSet.contains(checkDate.dayOfWeek.value) }
+            val pastDateStr = checkDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val pastDone = pastRoutines.count { logs["${pastDateStr}_${it.id}"]?.isDone == true }
+
+            if (pastRoutines.isNotEmpty()) {
+                if (pastDone > 0) {
+                    streak++
+                    checkDate = checkDate.minusDays(1)
+                } else {
+                    break // streak broken
+                }
+            } else {
+                // Rest day: no routines scheduled, don't break streak
+                checkDate = checkDate.minusDays(1)
+            }
+            dayCount++
+        }
+
+        val previousBest = _uiState.value.stats.bestStreak
+        val bestStreak = maxOf(streak, previousBest)
+
+        // Weekly calculation (Monday to today of current week)
+        val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        var weeklyTotal = 0
+        var weeklyCompleted = 0
+        var wDate = startOfWeek
+        while (!wDate.isAfter(today)) {
+            val dRoutines = routines.filter { it.daysIntSet.contains(wDate.dayOfWeek.value) }
+            val dStr = wDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            weeklyTotal += dRoutines.size
+            weeklyCompleted += dRoutines.count { logs["${dStr}_${it.id}"]?.isDone == true }
+            wDate = wDate.plusDays(1)
+        }
+        val weeklyPercent = if (weeklyTotal > 0) ((weeklyCompleted * 100) / weeklyTotal).coerceIn(0, 100) else 0
+
+        // Monthly calculation (1st of month to today)
+        val startOfMonth = today.withDayOfMonth(1)
+        var monthlyTotal = 0
+        var monthlyCompleted = 0
+        var mDate = startOfMonth
+        while (!mDate.isAfter(today)) {
+            val dRoutines = routines.filter { it.daysIntSet.contains(mDate.dayOfWeek.value) }
+            val dStr = mDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            monthlyTotal += dRoutines.size
+            monthlyCompleted += dRoutines.count { logs["${dStr}_${it.id}"]?.isDone == true }
+            mDate = mDate.plusDays(1)
+        }
+        val monthlyPercent = if (monthlyTotal > 0) ((monthlyCompleted * 100) / monthlyTotal).coerceIn(0, 100) else 0
+
+        // Yearly calculation (Jan 1 of year to today)
+        val startOfYear = today.withDayOfYear(1)
+        var yearlyTotal = 0
+        var yearlyCompleted = 0
+        var yDate = startOfYear
+        while (!yDate.isAfter(today)) {
+            val dRoutines = routines.filter { it.daysIntSet.contains(yDate.dayOfWeek.value) }
+            val dStr = yDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            yearlyTotal += dRoutines.size
+            yearlyCompleted += dRoutines.count { logs["${dStr}_${it.id}"]?.isDone == true }
+            yDate = yDate.plusDays(1)
+        }
+        val yearlyPercent = if (yearlyTotal > 0) ((yearlyCompleted * 100) / yearlyTotal).coerceIn(0, 100) else 0
+
+        return UserStats(
+            todayCompleted = todayCompleted,
+            todayTotal = todayTotal,
+            todayPercent = todayPercent,
+            currentStreak = streak,
+            bestStreak = bestStreak,
+            weeklyCompleted = weeklyCompleted,
+            weeklyTotal = weeklyTotal,
+            weeklyPercent = weeklyPercent,
+            monthlyCompleted = monthlyCompleted,
+            monthlyTotal = monthlyTotal,
+            monthlyPercent = monthlyPercent,
+            yearlyCompleted = yearlyCompleted,
+            yearlyTotal = yearlyTotal,
+            yearlyPercent = yearlyPercent,
+            lastUpdated = Timestamp.now()
+        )
     }
 }

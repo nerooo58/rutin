@@ -12,7 +12,8 @@
         "isSingleTime": "boolean",
         "days": "array",
         "notificationEnabled": "boolean",
-        "createdAt": "timestamp"
+        "createdAt": "timestamp",
+        "orderIndex": "number"
       }
     },
     "RoutineLog": {
@@ -36,8 +37,29 @@
       "collection": "settings",
       "fields": {
         "notificationsEnabled": "boolean",
+        "reminderMinutes": "number",
         "theme": "string",
         "lastSync": "timestamp"
+      }
+    },
+    "UserStats": {
+      "collection": "stats",
+      "fields": {
+        "todayCompleted": "number",
+        "todayTotal": "number",
+        "todayPercent": "number",
+        "currentStreak": "number",
+        "bestStreak": "number",
+        "weeklyCompleted": "number",
+        "weeklyTotal": "number",
+        "weeklyPercent": "number",
+        "monthlyCompleted": "number",
+        "monthlyTotal": "number",
+        "monthlyPercent": "number",
+        "yearlyCompleted": "number",
+        "yearlyTotal": "number",
+        "yearlyPercent": "number",
+        "lastUpdated": "timestamp"
       }
     }
   }

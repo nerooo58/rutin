@@ -26,7 +26,9 @@ data class WeatherInfo(
     val condition: WeatherCondition = WeatherCondition.CLEAR,
     val windSpeed: Double = 12.0,
     val isDay: Boolean = true,
-    val locationName: String = "Mevcut Konum"
+    val locationName: String = "Mevcut Konum",
+    val district: String = "",
+    val city: String = ""
 )
 
 object WeatherService {
@@ -84,6 +86,23 @@ object WeatherService {
         )
     }
 
+    suspend fun reverseGeocodeLocation(context: Context, lat: Double, lon: Double): Pair<String, String> = withContext(Dispatchers.IO) {
+        try {
+            val geocoder = android.location.Geocoder(context, java.util.Locale("tr", "TR"))
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocation(lat, lon, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val addr = addresses[0]
+                val district = addr.subAdminArea ?: addr.subLocality ?: addr.locality.orEmpty()
+                val city = addr.adminArea ?: addr.locality.orEmpty()
+                return@withContext Pair(district, city)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        Pair("", "")
+    }
+
     suspend fun getLastKnownLocation(context: Context): Pair<Double, Double>? = withContext(Dispatchers.IO) {
         try {
             val fusedClient = LocationServices.getFusedLocationProviderClient(context)
@@ -116,3 +135,4 @@ object WeatherService {
         }
     }
 }
+

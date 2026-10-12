@@ -1,8 +1,10 @@
 package com.nororoutine.batu.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -147,7 +149,143 @@ fun DayDetailBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            val dayTotal = dayRoutines.size
+            val dayCompleted = dayRoutines.count { uiState.logs["${dateString}_${it.id}"]?.isDone == true }
+            val dayPercent = if (dayTotal > 0) ((dayCompleted * 100) / dayTotal).coerceIn(0, 100) else 0
+
+            if (dayTotal > 0) {
+                // Progress and stats card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xE61A1635))
+                        .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(16.dp))
+                        .padding(14.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "$dayCompleted/$dayTotal Tamamlandı",
+                                    color = PureWhite,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (dayCompleted == dayTotal && dayTotal > 0) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = "🎉", fontSize = 14.sp)
+                                }
+                            }
+                            Text(
+                                text = "%$dayPercent",
+                                color = if (dayCompleted == dayTotal && dayTotal > 0) DoneGreen else AccentTeal,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        // Animated Progress bar
+                        val animatedFraction by animateFloatAsState(
+                            targetValue = if (dayTotal > 0) dayCompleted.toFloat() / dayTotal.toFloat() else 0f,
+                            animationSpec = tween(400),
+                            label = "progressBar"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0x33FFFFFF))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(animatedFraction)
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(AccentTeal, if (dayCompleted == dayTotal) DoneGreen else AccentPurple)
+                                        )
+                                    )
+                            )
+                        }
+
+                        // Mini metrics row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0x22F59E0B))
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "🔥 ${uiState.stats.currentStreak}g Seri",
+                                    color = Color(0xFFFBBF24),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0x227CF4DE))
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "📊 Hf: %${uiState.stats.weeklyPercent}",
+                                    color = AccentTeal,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0x22A78BFA))
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "📅 Ay: %${uiState.stats.monthlyPercent}",
+                                    color = AccentPurple,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0x2260A5FA))
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "📈 Yıl: %${uiState.stats.yearlyPercent}",
+                                    color = Color(0xFF60A5FA),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             if (dayRoutines.isEmpty()) {
                 Box(
