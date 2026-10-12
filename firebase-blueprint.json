@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Routine": {
+      "collection": "routines",
+      "fields": {
+        "id": "string",
+        "name": "string",
+        "category": "string",
+        "imageId": "string",
+        "startTime": "string",
+        "endTime": "string",
+        "isSingleTime": "boolean",
+        "days": "array",
+        "notificationEnabled": "boolean",
+        "createdAt": "timestamp"
+      }
+    },
+    "RoutineLog": {
+      "collection": "logs",
+      "fields": {
+        "routineId": "string",
+        "date": "string",
+        "status": "string",
+        "note": "string",
+        "completedAt": "timestamp"
+      }
+    },
+    "Category": {
+      "collection": "categories",
+      "fields": {
+        "name": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    "Settings": {
+      "collection": "settings",
+      "fields": {
+        "notificationsEnabled": "boolean",
+        "theme": "string",
+        "lastSync": "timestamp"
+      }
+    }
+  }
+}

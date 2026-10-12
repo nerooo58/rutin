@@ -1,0 +1,6 @@
+{
+  "name": "Rutin",
+  "description": "Kişisel rutin takip ve Noro AI entegrasyonu için akıcı, cam efektli prototip uygulaması",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
