@@ -177,13 +177,27 @@ class RutinViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isWeatherLoading = true) }
             val location = WeatherService.getLastKnownLocation(context)
-            val lat = location?.first ?: 41.0082 // Default Istanbul
-            val lon = location?.second ?: 28.9784
+            val isLocationAvailable = location != null
+
+            // If location is available, use user's GPS coordinates; otherwise default to İzmir
+            val lat = location?.first ?: WeatherService.IZMIR_LAT
+            val lon = location?.second ?: WeatherService.IZMIR_LON
+
             val weather = WeatherService.fetchWeather(lat, lon)
-            val geocoded = WeatherService.reverseGeocodeLocation(context, lat, lon)
+
+            val (district, city) = if (isLocationAvailable) {
+                val geocoded = WeatherService.reverseGeocodeLocation(context, lat, lon)
+                Pair(
+                    geocoded.first.ifEmpty { "" },
+                    geocoded.second.ifEmpty { "Konumunuz" }
+                )
+            } else {
+                Pair(WeatherService.IZMIR_DISTRICT, WeatherService.IZMIR_CITY)
+            }
+
             val updatedWeather = weather.copy(
-                district = geocoded.first.ifEmpty { if (location == null) "Kadıköy" else "" },
-                city = geocoded.second.ifEmpty { if (location == null) "İstanbul" else "" }
+                district = district,
+                city = city
             )
             _uiState.update {
                 it.copy(
@@ -527,8 +541,8 @@ class RutinViewModel(
 
                 val diffMinutes = java.time.Duration.between(routineTime, now).toMinutes()
                 return when {
-                    diffMinutes in -15..30 -> RoutineStatus.ACTIVE
-                    diffMinutes > 30 -> RoutineStatus.MISSED
+                    diffMinutes in 0..60 -> RoutineStatus.ACTIVE
+                    diffMinutes > 60 -> RoutineStatus.MISSED
                     else -> RoutineStatus.UPCOMING
                 }
             }

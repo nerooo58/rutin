@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Sync
@@ -228,56 +227,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
-            // Section 2: Tema
-            item {
-                SectionHeader(title = "Tema", icon = Icons.Rounded.DarkMode)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(GlassCardBackground)
-                        .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Karanlık Mod",
-                                color = PureWhite,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Karanlık cam (Glassmorphism) teması aktif",
-                                color = SubtitleWhite,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        Switch(
-                            checked = uiState.isDarkMode,
-                            onCheckedChange = { viewModel.setDarkMode(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = PureWhite,
-                                checkedTrackColor = AccentTeal,
-                                uncheckedThumbColor = SubtitleWhite,
-                                uncheckedTrackColor = Color(0x331E3250)
-                            )
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-            }
-
-            // Section 3: Noro Bağlantısı
+            // Section 2: Noro Bağlantısı
             item {
                 SectionHeader(title = "Noro Bağlantısı", icon = Icons.Rounded.AutoAwesome)
                 Spacer(modifier = Modifier.height(8.dp))

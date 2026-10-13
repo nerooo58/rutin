@@ -217,14 +217,15 @@ fun EditScreen(
                     }
                 }
             } else {
+                val sortedRoutines = uiState.routines.sortedBy { it.startTime.ifEmpty { it.time } }
                 itemsIndexed(
-                    items = uiState.routines,
+                    items = sortedRoutines,
                     key = { _, item -> item.id }
                 ) { index, routine ->
                     EditableRoutineCard(
                         routine = routine,
                         isFirst = index == 0,
-                        isLast = index == uiState.routines.lastIndex,
+                        isLast = index == sortedRoutines.lastIndex,
                         onMoveUp = { viewModel.moveRoutineUp(index) },
                         onMoveDown = { viewModel.moveRoutineDown(index) },
                         onEdit = {

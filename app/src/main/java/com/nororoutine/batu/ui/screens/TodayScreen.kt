@@ -1,7 +1,12 @@
 package com.nororoutine.batu.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -93,6 +98,7 @@ import com.nororoutine.batu.ui.theme.MissedRed
 import com.nororoutine.batu.ui.theme.MutedWhite
 import com.nororoutine.batu.ui.theme.PureWhite
 import com.nororoutine.batu.ui.theme.SubtitleWhite
+import androidx.compose.ui.text.style.TextOverflow
 import com.nororoutine.batu.viewmodel.RutinUiState
 import com.nororoutine.batu.viewmodel.RutinViewModel
 import kotlinx.coroutines.delay
@@ -140,9 +146,33 @@ fun TodayScreen(
 
     val nowLocalTime = remember(currentTimeMillis) { LocalTime.now() }
 
-    // Fetch weather on launch
-    LaunchedEffect(Unit) {
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
         viewModel.fetchWeather(context)
+    }
+
+    // Check location permission & fetch weather on launch
+    LaunchedEffect(Unit) {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            viewModel.fetchWeather(context)
+        }
     }
 
     val todayRoutines = viewModel.getRoutinesForDay(today)
@@ -230,7 +260,7 @@ fun TodayScreen(
                 "${uiState.weatherInfo.district}, ${uiState.weatherInfo.city}"
             uiState.weatherInfo.city.isNotEmpty() -> uiState.weatherInfo.city
             uiState.weatherInfo.district.isNotEmpty() -> uiState.weatherInfo.district
-            else -> "Konum alınıyor..."
+            else -> "İzmir"
         }
     }
 
@@ -250,11 +280,15 @@ fun TodayScreen(
                 completedTodayRoutines = completedCount,
                 todayPercent = todayPercent,
                 currentStreak = currentStreak,
-                focusedRoutine = todayRoutines.getOrNull(focusedIndex),
+                focusedRoutine = todayRoutines.getOrNull(focusedIndex) ?: targetRoutine,
                 viewModel = viewModel,
                 today = today,
                 onViewRoutinesClick = { showTodayRoutinesSheet = true },
                 onToggleRoutine = { routine -> viewModel.toggleRoutineStatus(routine.id, today) },
+                onSelectRoutine = { routine ->
+                    val idx = todayRoutines.indexOfFirst { it.id == routine.id }
+                    if (idx >= 0) focusedIndex = idx
+                },
                 onOpenNote = { routine -> selectedRoutineForSheet = routine }
             )
         } else {
@@ -645,52 +679,78 @@ fun LandscapeTodayLayout(
     today: LocalDate,
     onViewRoutinesClick: () -> Unit,
     onToggleRoutine: (Routine) -> Unit,
+    onSelectRoutine: (Routine) -> Unit = {},
     onOpenNote: (Routine) -> Unit
 ) {
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
+    val todayRoutines = viewModel.getRoutinesForDay(today)
 
     Row(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+            .padding(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Side: Time, Date, Weather info + Routine count pill
+        // Left Side: Time, Date, Weather Card & Rich Routine Summary / Checklist
         Column(
             modifier = Modifier
-                .weight(1f)
+                .weight(1.1f)
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = formattedTime,
-                color = PureWhite,
-                fontSize = 58.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = (-1).sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    Text(
+                        text = formattedTime,
+                        color = PureWhite,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-1).sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = dateText,
+                        color = SubtitleWhite,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(4.dp))
+                // Streak Badge
+                if (currentStreak > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0x33F59E0B))
+                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "🔥 $currentStreak Gün Seri",
+                            color = Color(0xFFFBBF24),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
 
-            Text(
-                text = dateText,
-                color = SubtitleWhite,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Spacer(modifier = Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // Weather Card with Location and Günün Rutinleri Pill
+            // Weather Card with Location
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xF2131D31))
-                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(20.dp))
-                    .padding(16.dp)
+                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(18.dp))
+                    .padding(14.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -703,13 +763,13 @@ fun LandscapeTodayLayout(
                                 imageVector = Icons.Rounded.Thermostat,
                                 contentDescription = null,
                                 tint = AccentTeal,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "${uiState.weatherInfo.temperature.toInt()}°C • ${uiState.weatherInfo.condition.label}",
                                 color = PureWhite,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -719,63 +779,177 @@ fun LandscapeTodayLayout(
                                 imageVector = Icons.Rounded.LocationOn,
                                 contentDescription = null,
                                 tint = AccentPurple,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = locationText,
                                 color = SubtitleWhite,
-                                fontSize = 13.sp
+                                fontSize = 12.sp
                             )
                         }
                     }
 
-                    // Routine Count Pill with completion and streak
-                    val isAllDone = totalTodayRoutines > 0 && completedTodayRoutines == totalTodayRoutines
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (currentStreak > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(Color(0x33F59E0B))
-                                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "🔥 $currentStreak gün",
-                                    color = Color(0xFFFBBF24),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                    val completionColor = getCompletionColor(todayPercent, totalTodayRoutines)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = if (totalTodayRoutines > 0) "%$todayPercent" else "-",
+                            color = completionColor,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "$completedTodayRoutines / $totalTodayRoutines Tamamlandı",
+                            color = MutedWhite,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
 
-                        val completionColor = getCompletionColor(todayPercent, totalTodayRoutines)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Today's Routine List Preview (Quick Checklist for Tablet)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xE6131D31))
+                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(18.dp))
+                    .padding(14.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Günün Rutinleri",
+                            color = PureWhite,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(if (totalTodayRoutines > 0) completionColor.copy(alpha = 0.22f) else Color(0x33A78BFA))
-                                .border(1.dp, if (totalTodayRoutines > 0) completionColor.copy(alpha = 0.75f) else AccentPurple, RoundedCornerShape(999.dp))
+                                .background(AccentPurple.copy(alpha = 0.25f))
                                 .clickable { onViewRoutinesClick() }
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (isAllDone) Icons.Rounded.Check else Icons.Rounded.ViewCarousel,
-                                    contentDescription = null,
-                                    tint = if (totalTodayRoutines > 0) completionColor else AccentPurple,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (totalTodayRoutines > 0) "$completedTodayRoutines/$totalTodayRoutines (%$todayPercent)" else "$totalTodayRoutines rutin",
-                                    color = PureWhite,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            Text(
+                                text = "Tümünü Gör",
+                                color = AccentTeal,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (todayRoutines.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Bugün için rutin planlanmadı.",
+                                color = MutedWhite,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(todayRoutines.size, key = { todayRoutines[it].id }) { idx ->
+                                val r = todayRoutines[idx]
+                                val logKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${r.id}"
+                                val isDone = uiState.logs[logKey]?.isDone == true
+                                val timeStr = r.startTime.ifEmpty { r.time }
+
+                                val isSelected = focusedRoutine?.id == r.id
+                                val rowBg = when {
+                                    isSelected -> Color(0x33A78BFA)
+                                    isDone -> Color(0x2210B981)
+                                    else -> Color(0x14FFFFFF)
+                                }
+                                val rowBorder = when {
+                                    isSelected -> AccentPurple
+                                    isDone -> Color(0xFF10B981).copy(alpha = 0.5f)
+                                    else -> Color(0x1AFFFFFF)
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(rowBg)
+                                        .border(1.dp, rowBorder, RoundedCornerShape(10.dp))
+                                        .clickable { onSelectRoutine(r) }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isDone) Color(0xFF10B981) else Color(0x33FFFFFF))
+                                                .clickable { onToggleRoutine(r) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isDone) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF0D0B1E),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = r.name,
+                                                color = if (isDone) MutedWhite else PureWhite,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (timeStr.isNotEmpty()) {
+                                                Text(
+                                                    text = timeStr,
+                                                    color = SubtitleWhite,
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0x22A78BFA))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = r.category,
+                                            color = AccentPurple,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -783,10 +957,10 @@ fun LandscapeTodayLayout(
             }
         }
 
-        // Right Side: Routine Card
+        // Right Side: Active / Focused Routine Card
         Box(
             modifier = Modifier
-                .weight(1.2f)
+                .weight(1.15f)
                 .fillMaxHeight(),
             contentAlignment = Alignment.Center
         ) {
@@ -806,7 +980,7 @@ fun LandscapeTodayLayout(
             } else {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
+                        .fillMaxWidth(0.9f)
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color(0xF2162035))
                         .padding(28.dp),
@@ -823,6 +997,7 @@ fun LandscapeTodayLayout(
         }
     }
 }
+
 
 /**
  * Vertical Card Stack / Carousel with smooth spring drag physics and solid glass cards.

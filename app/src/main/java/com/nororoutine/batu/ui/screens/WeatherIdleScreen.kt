@@ -157,7 +157,7 @@ fun WeatherIdleScreen(
                 "${weatherInfo.district}, ${weatherInfo.city}"
             weatherInfo.city.isNotEmpty() -> weatherInfo.city
             weatherInfo.district.isNotEmpty() -> weatherInfo.district
-            else -> "Konum alınıyor..."
+            else -> "İzmir"
         }
     }
 
