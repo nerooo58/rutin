@@ -35,6 +35,8 @@ class NoroRoutineApp : Application() {
             NotificationScheduler.schedulePeriodicCheck(this)
             // Reschedule active alarms on app launch
             NotificationScheduler.rescheduleAllFromCache(this)
+            // Refresh widgets with latest cache on app launch
+            com.nororoutine.batu.widget.WidgetDataManager.refreshAllWidgets(this)
             Log.d(TAG, "NoroRoutineApp initialized notification channel and scheduled check successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing NoroRoutineApp notification subsystem", e)

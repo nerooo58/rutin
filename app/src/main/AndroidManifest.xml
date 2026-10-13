@@ -52,6 +52,55 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
+
+        <!-- App Widgets -->
+        <!-- 1. Detailed Today Routines List Widget -->
+        <receiver
+            android:name=".widget.TodayRoutinesListWidgetProvider"
+            android:label="@string/widget_today_list_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.nororoutine.batu.widget.ACTION_TOGGLE_ROUTINE" />
+                <action android:name="com.nororoutine.batu.widget.ACTION_REFRESH_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_list_info" />
+        </receiver>
+
+        <!-- 2. Next Routine Glance Card Widget -->
+        <receiver
+            android:name=".widget.NextRoutineGlanceWidgetProvider"
+            android:label="@string/widget_next_routine_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.nororoutine.batu.widget.ACTION_TOGGLE_GLANCE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_next_routine_info" />
+        </receiver>
+
+        <!-- 3. Today Summary Banner Widget -->
+        <receiver
+            android:name=".widget.TodaySummaryWidgetProvider"
+            android:label="@string/widget_summary_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_summary_info" />
+        </receiver>
+
+        <!-- RemoteViewsService for List Widget -->
+        <service
+            android:name=".widget.TodayRoutinesWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -14,6 +14,7 @@ import com.nororoutine.batu.model.UserStats
 import com.nororoutine.batu.network.WeatherInfo
 import com.nororoutine.batu.network.WeatherService
 import com.nororoutine.batu.notification.NotificationScheduler
+import com.nororoutine.batu.widget.WidgetDataManager
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,13 +61,25 @@ class RutinViewModel(
         // Real-time synchronization for Routines
         viewModelScope.launch {
             repository.observeRoutines().collect { firestoreRoutines ->
+                val sortedRoutines = firestoreRoutines.sortedWith(compareBy({ it.timeToMinutes }, { it.orderIndex }))
                 _uiState.update { state ->
                     state.copy(
-                        routines = firestoreRoutines,
+                        routines = sortedRoutines,
                         isFirebaseConnected = true
                     )
                 }
-                recalculateAndSaveStats(firestoreRoutines, _uiState.value.logs)
+                recalculateAndSaveStats(sortedRoutines, _uiState.value.logs)
+
+                // Update home screen widgets with fresh routines
+                try {
+                    WidgetDataManager.updateWidgetCache(
+                        context = NoroRoutineApp.instance,
+                        routines = sortedRoutines,
+                        logs = _uiState.value.logs
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("RutinViewModel", "Error syncing widget routines cache", e)
+                }
 
                 // Reschedule all active notifications on app launch / data sync
                 try {
@@ -92,6 +105,17 @@ class RutinViewModel(
                     )
                 }
                 recalculateAndSaveStats(_uiState.value.routines, logsMap)
+
+                // Update home screen widgets with fresh logs
+                try {
+                    WidgetDataManager.updateWidgetCache(
+                        context = NoroRoutineApp.instance,
+                        routines = _uiState.value.routines,
+                        logs = logsMap
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.e("RutinViewModel", "Error syncing widget logs cache", e)
+                }
             }
         }
 
@@ -374,40 +398,76 @@ class RutinViewModel(
         repository.saveRoutine(updatedList[index + 1])
     }
 
-    fun toggleRoutineStatus(routineId: String, date: LocalDate = LocalDate.now()) {
+    fun markRoutineDone(routineId: String, date: LocalDate = LocalDate.now()) {
+        if (date.isAfter(LocalDate.now())) return // Future days are locked
         val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         val key = "${dateString}_${routineId}"
         val currentLog = _uiState.value.logs[key]
-
-        // Status flow: None/Upcoming -> DONE -> MISSED -> DONE
-        val newIsDone = if (currentLog == null) {
-            true // first tap marks done
-        } else {
-            !currentLog.isDone // toggle between done and missed
-        }
 
         val updatedLog = RoutineLog(
             id = key,
             routineId = routineId,
             date = dateString,
-            status = if (newIsDone) "done" else "missed",
+            status = "done",
             note = currentLog?.note.orEmpty(),
             completedAt = Timestamp.now()
         )
 
         val updatedLogs = _uiState.value.logs + (key to updatedLog)
-        val shouldShake = !newIsDone
-        _uiState.update { state ->
-            state.copy(
-                logs = updatedLogs,
-                shakeRoutineId = if (shouldShake) routineId else null,
-                shakeTrigger = if (shouldShake) state.shakeTrigger + 1 else state.shakeTrigger
-            )
-        }
+        _uiState.update { state -> state.copy(logs = updatedLogs) }
 
         // Persist immediately to Firestore
         repository.saveLog(updatedLog)
         recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
+
+        if (date == LocalDate.now()) {
+            try {
+                WidgetDataManager.updateWidgetCache(
+                    context = NoroRoutineApp.instance,
+                    routines = _uiState.value.routines,
+                    logs = updatedLogs
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("RutinViewModel", "Error updating widget cache on markDone", e)
+            }
+        }
+    }
+
+    fun markRoutineEmpty(routineId: String, date: LocalDate = LocalDate.now()) {
+        if (date.isAfter(LocalDate.now())) return // Future days are locked
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val key = "${dateString}_${routineId}"
+        val updatedLogs = _uiState.value.logs - key
+        _uiState.update { state -> state.copy(logs = updatedLogs) }
+
+        // Delete from Firestore
+        repository.deleteLog(key)
+        recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
+
+        if (date == LocalDate.now()) {
+            try {
+                WidgetDataManager.updateWidgetCache(
+                    context = NoroRoutineApp.instance,
+                    routines = _uiState.value.routines,
+                    logs = updatedLogs
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("RutinViewModel", "Error updating widget cache on markEmpty", e)
+            }
+        }
+    }
+
+    fun toggleRoutineStatus(routineId: String, date: LocalDate = LocalDate.now()) {
+        if (date.isAfter(LocalDate.now())) return // Future days are locked
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val key = "${dateString}_${routineId}"
+        val currentLog = _uiState.value.logs[key]
+
+        if (currentLog?.isDone == true) {
+            markRoutineEmpty(routineId, date)
+        } else {
+            markRoutineDone(routineId, date)
+        }
     }
 
     fun updateRoutineNote(routineId: String, date: LocalDate, note: String) {
@@ -515,8 +575,8 @@ class RutinViewModel(
         val key = "${dateString}_${routine.id}"
         val log = _uiState.value.logs[key]
 
-        if (log != null) {
-            return if (log.isDone) RoutineStatus.DONE else RoutineStatus.MISSED
+        if (log != null && log.isDone) {
+            return RoutineStatus.DONE
         }
 
         // If today, check time slot
@@ -529,8 +589,8 @@ class RutinViewModel(
 
                 return when {
                     !now.isBefore(start) && !now.isAfter(end) -> RoutineStatus.ACTIVE
-                    now.isAfter(end) -> RoutineStatus.MISSED
-                    else -> RoutineStatus.UPCOMING
+                    now.isBefore(start) -> RoutineStatus.UPCOMING
+                    else -> RoutineStatus.EMPTY
                 }
             } else {
                 val routineTime = try {
@@ -542,18 +602,20 @@ class RutinViewModel(
                 val diffMinutes = java.time.Duration.between(routineTime, now).toMinutes()
                 return when {
                     diffMinutes in 0..60 -> RoutineStatus.ACTIVE
-                    diffMinutes > 60 -> RoutineStatus.MISSED
-                    else -> RoutineStatus.UPCOMING
+                    routineTime.isAfter(now) -> RoutineStatus.UPCOMING
+                    else -> RoutineStatus.EMPTY
                 }
             }
         }
 
-        return if (date.isBefore(LocalDate.now())) RoutineStatus.MISSED else RoutineStatus.UPCOMING
+        return RoutineStatus.EMPTY
     }
 
     fun getRoutinesForDay(date: LocalDate): List<Routine> {
         val dayOfWeekInt = date.dayOfWeek.value // 1 = Monday, 7 = Sunday
-        return _uiState.value.routines.filter { it.daysIntSet.contains(dayOfWeekInt) }
+        return _uiState.value.routines
+            .filter { it.daysIntSet.contains(dayOfWeekInt) }
+            .sortedWith(compareBy({ it.timeToMinutes }, { it.orderIndex }))
     }
 
     /**

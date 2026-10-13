@@ -43,12 +43,26 @@ data class Routine(
     val isRange: Boolean get() = !isSingleTime
     val time: String get() = if (isSingleTime || endTime.isNullOrBlank()) startTime else "$startTime – $endTime"
     val daysIntSet: Set<Int> get() = days.mapNotNull { DAY_STRING_TO_INT[it] }.toSet()
+    val timeToMinutes: Int
+        get() {
+            val clean = (if (startTime.isNotBlank()) startTime else time).trim()
+            return try {
+                val firstTime = clean.split("–", "-", " ").first().trim()
+                val parts = firstTime.split(":")
+                val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
+                val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                h * 60 + m
+            } catch (e: Exception) {
+                0
+            }
+        }
 }
 
 enum class RoutineStatus {
     UPCOMING,
     ACTIVE,
     DONE,
+    EMPTY,
     MISSED
 }
 

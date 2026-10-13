@@ -217,7 +217,7 @@ fun EditScreen(
                     }
                 }
             } else {
-                val sortedRoutines = uiState.routines.sortedBy { it.startTime.ifEmpty { it.time } }
+                val sortedRoutines = uiState.routines.sortedWith(compareBy({ it.timeToMinutes }, { it.orderIndex }))
                 itemsIndexed(
                     items = sortedRoutines,
                     key = { _, item -> item.id }

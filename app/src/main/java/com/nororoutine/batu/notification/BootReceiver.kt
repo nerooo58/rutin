@@ -38,6 +38,13 @@ class BootReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error enqueueing RescheduleWorker on boot", e)
             }
+
+            // 3. Refresh home screen widgets on reboot
+            try {
+                com.nororoutine.batu.widget.WidgetDataManager.refreshAllWidgets(context)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing widgets on boot", e)
+            }
         }
     }
 }

@@ -1,3 +1,14 @@
 <resources>
     <string name="app_name">Rutin</string>
+    <string name="widget_today_list_name">Günün Rutinleri (Liste)</string>
+    <string name="widget_today_list_desc">Bugünkü rutinlerini listeler, tek dokunuşla tamamla.</string>
+    <string name="widget_next_routine_name">Sıradaki Rutin (Kart)</string>
+    <string name="widget_next_routine_desc">Sıradaki veya aktif rutini ve bugünün özetini gösterir.</string>
+    <string name="widget_summary_name">Günün Özeti (Banner)</string>
+    <string name="widget_summary_desc">Bugünkü rutinlerin ilerleme durumunu ve sıradaki rutini gösterir.</string>
+    <string name="widget_no_routines_today">Bugün için planlanmış rutin yok</string>
+    <string name="widget_all_done">Tüm rutinler tamamlandı!</string>
+    <string name="widget_completed">Tamamlandı</string>
+    <string name="widget_mark_done">Tamamla</string>
+    <string name="widget_today">Bugün</string>
 </resources>

@@ -7,4 +7,21 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- App & Widget Theme Colors -->
+    <color name="widget_bg_dark">#FF0D0B1E</color>
+    <color name="widget_card_bg">#FF161A2E</color>
+    <color name="widget_card_hover">#FF202640</color>
+    <color name="widget_border">#33FFFFFF</color>
+    <color name="widget_border_subtle">#1AFFFFFF</color>
+    <color name="widget_accent_purple">#FFA78BFA</color>
+    <color name="widget_purple_primary">#FF7B5AF7</color>
+    <color name="widget_accent_teal">#FF7CF4DE</color>
+    <color name="widget_done_green">#FF4ADE80</color>
+    <color name="widget_done_green_bg">#334ADE80</color>
+    <color name="widget_text_white">#FFFFFFFF</color>
+    <color name="widget_text_muted">#B3FFFFFF</color>
+    <color name="widget_text_dim">#8094A3B8</color>
+    <color name="widget_active_bg">#337B5AF7</color>
+    <color name="widget_active_border">#66A78BFA</color>
+    <color name="widget_progress_track">#FF1E243B</color>
 </resources>

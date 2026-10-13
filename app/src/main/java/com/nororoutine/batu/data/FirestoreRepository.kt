@@ -65,7 +65,7 @@ class FirestoreRepository {
                     if (snapshot != null) {
                         val routines = snapshot.documents.mapNotNull { doc ->
                             doc.toObject(Routine::class.java)?.copy(id = doc.id)
-                        }.sortedBy { it.orderIndex }
+                        }.sortedWith(compareBy({ it.timeToMinutes }, { it.orderIndex }))
                         trySend(routines)
                     }
                 }
@@ -300,6 +300,30 @@ class FirestoreRepository {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Exception in saveLog", e)
+        }
+    }
+
+    /**
+     * Delete a log from logs collection (e.g. when marking empty / unchecking a routine).
+     */
+    fun deleteLog(logId: String) {
+        val firestore = db
+        if (firestore == null) {
+            Log.w(TAG, "deleteLog: Firestore not available, skipping delete")
+            return
+        }
+
+        try {
+            firestore.collection(COLLECTION_LOGS).document(logId)
+                .delete()
+                .addOnSuccessListener {
+                    Log.d(TAG, "Log successfully deleted: $logId")
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to delete log: $logId", e)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception in deleteLog", e)
         }
     }
 

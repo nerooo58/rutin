@@ -50,6 +50,7 @@ import com.nororoutine.batu.ui.illustrations.RoutineIllustration
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
 import com.nororoutine.batu.ui.theme.DoneGreen
+import com.nororoutine.batu.ui.theme.GlassCardBackground
 import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
 import com.nororoutine.batu.ui.theme.MissedRed
 import com.nororoutine.batu.ui.theme.MutedWhite
@@ -177,9 +178,9 @@ private fun TodayRoutineSheetItem(
     val itemBg by animateColorAsState(
         targetValue = when (status) {
             RoutineStatus.DONE -> Color(0x264ADE80)
-            RoutineStatus.MISSED -> Color(0x26F87171)
             RoutineStatus.ACTIVE -> Color(0x33A78BFA)
             RoutineStatus.UPCOMING -> Color(0x221E3250)
+            else -> GlassCardBackground
         },
         animationSpec = tween(250),
         label = "sheetItemBg"
@@ -188,9 +189,9 @@ private fun TodayRoutineSheetItem(
     val itemBorder by animateColorAsState(
         targetValue = when (status) {
             RoutineStatus.DONE -> Color(0x4D4ADE80)
-            RoutineStatus.MISSED -> Color(0x4DF87171)
             RoutineStatus.ACTIVE -> AccentPurple
             RoutineStatus.UPCOMING -> GlassCardBorderSubtle
+            else -> GlassCardBorderSubtle
         },
         animationSpec = tween(250),
         label = "sheetItemBorder"
@@ -219,7 +220,6 @@ private fun TodayRoutineSheetItem(
                 text = routine.name,
                 color = when (status) {
                     RoutineStatus.DONE -> DoneGreen
-                    RoutineStatus.MISSED -> MissedRed
                     else -> PureWhite
                 },
                 fontSize = 15.sp,
@@ -273,28 +273,20 @@ private fun TodayRoutineSheetItem(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        // Mark Done / Missed Toggle Button
+        // Mark Done Toggle Button
         IconButton(
             onClick = onToggleStatus,
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(
-                    when (status) {
-                        RoutineStatus.DONE -> DoneGreen
-                        RoutineStatus.MISSED -> MissedRed
-                        else -> Color(0x33A78BFA)
-                    }
+                    if (status == RoutineStatus.DONE) DoneGreen else Color(0x22FFFFFF)
                 )
         ) {
             Icon(
-                imageVector = when (status) {
-                    RoutineStatus.DONE -> Icons.Rounded.Check
-                    RoutineStatus.MISSED -> Icons.Rounded.Close
-                    else -> Icons.Rounded.RadioButtonUnchecked
-                },
+                imageVector = if (status == RoutineStatus.DONE) Icons.Rounded.Check else Icons.Rounded.RadioButtonUnchecked,
                 contentDescription = "Durum Değiştir",
-                tint = if (status == RoutineStatus.DONE || status == RoutineStatus.MISSED) Color(0xFF0F172A) else PureWhite,
+                tint = if (status == RoutineStatus.DONE) Color(0xFF0F172A) else PureWhite,
                 modifier = Modifier.size(18.dp)
             )
         }

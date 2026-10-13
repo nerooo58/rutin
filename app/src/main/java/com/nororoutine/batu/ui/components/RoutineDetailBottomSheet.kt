@@ -157,24 +157,23 @@ fun RoutineDetailBottomSheet(
             // Status Toggle Bar
             val statusBg = when (status) {
                 RoutineStatus.DONE -> DoneCardBg
-                RoutineStatus.MISSED -> MissedCardBg
                 else -> Color(0x227850FF)
             }
             val statusBorder = when (status) {
                 RoutineStatus.DONE -> DoneCardBorder
-                RoutineStatus.MISSED -> MissedCardBorder
                 else -> AccentPurple.copy(alpha = 0.3f)
             }
             val statusColor = when (status) {
                 RoutineStatus.DONE -> DoneGreen
-                RoutineStatus.MISSED -> MissedRed
-                else -> AccentPurple
+                RoutineStatus.ACTIVE -> AccentTeal
+                RoutineStatus.UPCOMING -> AccentPurple
+                else -> SubtitleWhite
             }
             val statusLabel = when (status) {
                 RoutineStatus.DONE -> "Tamamlandı"
-                RoutineStatus.MISSED -> "Yapılamadı"
                 RoutineStatus.ACTIVE -> "Şu an Aktif"
                 RoutineStatus.UPCOMING -> "Yaklaşan"
+                else -> "Boş"
             }
 
             Row(

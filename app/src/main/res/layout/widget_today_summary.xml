@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_dark"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="14dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="8dp">
+
+    <!-- Left: App Icon & Date -->
+    <ImageView
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:contentDescription="Rutin"
+        android:src="@drawable/widget_ic_sparkle" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bugün"
+            android:textColor="@color/widget_text_white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_summary_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="13 Ekim"
+            android:textColor="@color/widget_text_dim"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:background="@color/widget_border_subtle" />
+
+    <!-- Center: Active or Next Routine Title & Time -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_summary_routine_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Sabah Rutini"
+            android:textColor="@color/widget_text_white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_summary_routine_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="08:00 - Sıradaki"
+            android:textColor="@color/widget_accent_purple"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <!-- Right: Progress Badge -->
+    <LinearLayout
+        android:id="@+id/widget_summary_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_chip_category_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingStart="8dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/widget_summary_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="3 / 5"
+            android:textColor="@color/widget_done_green"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_summary_percent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="%60"
+            android:textColor="@color/widget_text_dim"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+</LinearLayout>

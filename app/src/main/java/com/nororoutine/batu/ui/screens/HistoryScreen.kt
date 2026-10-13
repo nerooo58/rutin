@@ -1429,21 +1429,19 @@ private fun InlineRoutineItem(
     val status = viewModel.getRoutineStatus(routine, date)
 
     val isDone = log?.isDone == true
-    val isMissed = log != null && !log.isDone
 
     var inlineNote by remember(log?.note) { mutableStateOf(log?.note.orEmpty()) }
 
     val statusColor = when (status) {
         RoutineStatus.DONE -> DoneGreen
-        RoutineStatus.MISSED -> MissedRed
         RoutineStatus.ACTIVE -> AccentTeal
         RoutineStatus.UPCOMING -> AccentPurple
+        else -> SubtitleWhite
     }
 
     val cardBg by animateColorAsState(
         targetValue = when {
             isDone -> DoneCardBg
-            isMissed -> MissedCardBg
             else -> GlassCardBackground
         },
         animationSpec = tween(300),
@@ -1453,7 +1451,6 @@ private fun InlineRoutineItem(
     val cardBorder by animateColorAsState(
         targetValue = when {
             isDone -> DoneCardBorder
-            isMissed -> MissedCardBorder
             else -> GlassCardBorderSubtle
         },
         animationSpec = tween(300),
@@ -1486,7 +1483,7 @@ private fun InlineRoutineItem(
                     Column {
                         Text(
                             text = routine.name,
-                            color = if (isDone) DoneGreen else if (isMissed) MissedRed else PureWhite,
+                            color = if (isDone) DoneGreen else PureWhite,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1532,23 +1529,15 @@ private fun InlineRoutineItem(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = when (status) {
-                                    RoutineStatus.DONE -> Icons.Rounded.Check
-                                    RoutineStatus.MISSED -> Icons.Rounded.Close
-                                    else -> Icons.Rounded.RadioButtonUnchecked
-                                },
+                                imageVector = if (isDone) Icons.Rounded.Check else Icons.Rounded.RadioButtonUnchecked,
                                 contentDescription = null,
-                                tint = statusColor,
+                                tint = if (isDone) DoneGreen else SubtitleWhite,
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = when (status) {
-                                    RoutineStatus.DONE -> "Tamamlandı"
-                                    RoutineStatus.MISSED -> "Kaçırıldı"
-                                    else -> "Bekliyor"
-                                },
-                                color = statusColor,
+                                text = if (isDone) "Tamamlandı" else "Boş",
+                                color = if (isDone) DoneGreen else SubtitleWhite,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1565,12 +1554,8 @@ private fun InlineRoutineItem(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = when (status) {
-                                RoutineStatus.DONE -> "Tamamlandı"
-                                RoutineStatus.MISSED -> "Kaçırıldı"
-                                else -> "Kayıt yok"
-                            },
-                            color = statusColor,
+                            text = if (isDone) "Tamamlandı" else "Boş",
+                            color = if (isDone) DoneGreen else SubtitleWhite,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
