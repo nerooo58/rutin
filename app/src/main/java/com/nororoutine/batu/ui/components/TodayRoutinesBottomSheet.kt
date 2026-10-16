@@ -324,36 +324,40 @@ private fun TodayRoutineSheetItem(
         Spacer(modifier = Modifier.width(6.dp))
 
         // Information (İ) Button (Odak Modu & Alt Adımlar)
-        IconButton(
-            onClick = onOpenInfo,
+        Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .background(Color(0x22FFFFFF))
+                .border(1.dp, GlassCardBorderSubtle, CircleShape)
+                .clickable { onOpenInfo() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Rounded.Info,
                 contentDescription = "Rutin Seçenekleri",
                 tint = if (routine.isRange) AccentTeal else AccentPurple,
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(13.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(4.dp))
+        Spacer(modifier = Modifier.width(6.dp))
 
         // Note button
-        IconButton(
-            onClick = onOpenNote,
+        Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .background(Color(0x22FFFFFF))
+                .border(1.dp, GlassCardBorderSubtle, CircleShape)
+                .clickable { onOpenNote() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Rounded.EditNote,
                 contentDescription = "Not Ekle / Oku",
                 tint = AccentTeal,
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(14.dp)
             )
         }
 

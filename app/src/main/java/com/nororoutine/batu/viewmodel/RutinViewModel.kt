@@ -543,7 +543,13 @@ class RutinViewModel(
         repository.saveLog(updatedLog)
     }
 
-    fun saveFocusSession(routineId: String, durationSeconds: Int, markRoutineComplete: Boolean, date: LocalDate = LocalDate.now()) {
+    fun saveFocusSession(
+        routineId: String,
+        durationSeconds: Int,
+        markRoutineComplete: Boolean,
+        sessionNote: String = "",
+        date: LocalDate = LocalDate.now()
+    ) {
         val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         val key = "${dateString}_${routineId}"
         val currentLog = _uiState.value.logs[key] ?: RoutineLog(
@@ -555,10 +561,23 @@ class RutinViewModel(
         )
 
         val newTotalDuration = currentLog.focusDurationSeconds + durationSeconds
+        val nowTimeStr = try {
+            LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+        } catch (e: Exception) {
+            "12:00"
+        }
+        val formattedSessionEntry = if (sessionNote.isNotBlank()) {
+            "$nowTimeStr|$durationSeconds|$sessionNote"
+        } else {
+            "$nowTimeStr|$durationSeconds|Odak Seansı"
+        }
+        val updatedSessionNotes = currentLog.focusSessionNotes + formattedSessionEntry
+
         val updatedLog = currentLog.copy(
             status = if (markRoutineComplete) "done" else currentLog.status,
             completedAt = if (markRoutineComplete) (currentLog.completedAt ?: Timestamp.now()) else currentLog.completedAt,
-            focusDurationSeconds = newTotalDuration
+            focusDurationSeconds = newTotalDuration,
+            focusSessionNotes = updatedSessionNotes
         )
         val updatedLogs = _uiState.value.logs + (key to updatedLog)
         _uiState.update { it.copy(logs = updatedLogs) }

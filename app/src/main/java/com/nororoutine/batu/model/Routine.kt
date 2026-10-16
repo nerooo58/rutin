@@ -89,7 +89,8 @@ data class RoutineLog(
     val note: String = "",
     val completedAt: Timestamp? = null,
     val completedSubtasks: List<String> = emptyList(),
-    val focusDurationSeconds: Int = 0
+    val focusDurationSeconds: Int = 0,
+    val focusSessionNotes: List<String> = emptyList()
 ) {
     // Computed UI helper properties
     val dateString: String get() = date

@@ -292,8 +292,7 @@ fun TodayScreen(
     var selectedRoutineForSheet by remember { mutableStateOf<Routine?>(null) }
     var showTodayRoutinesSheet by remember { mutableStateOf(false) }
     var infoMenuRoutine by remember { mutableStateOf<Routine?>(null) }
-    var focusModeRoutine by remember { mutableStateOf<Routine?>(null) }
-    var stopwatchRoutine by remember { mutableStateOf<Routine?>(null) }
+    var fullScreenFocusRoutine by remember { mutableStateOf<Routine?>(null) }
     var subtasksRoutine by remember { mutableStateOf<Routine?>(null) }
     var showStoryShareSheet by remember { mutableStateOf(false) }
 
@@ -426,11 +425,7 @@ fun TodayScreen(
                 onSelectFocusMode = {
                     val r = currentRoutine
                     infoMenuRoutine = null
-                    if (r.isRange) {
-                        focusModeRoutine = r
-                    } else {
-                        stopwatchRoutine = r
-                    }
+                    fullScreenFocusRoutine = r
                 },
                 onSelectSubtasks = {
                     val r = currentRoutine
@@ -440,39 +435,15 @@ fun TodayScreen(
             )
         }
 
-        // Focus Mode Bottom Sheet (Countdown timer for interval/range routines)
-        focusModeRoutine?.let { routine ->
+        // TAM EKRAN Süre Tutma & Odak Modu (Persistent Background & Timestamp Recovery)
+        fullScreenFocusRoutine?.let { routine ->
             val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
-            FocusModeBottomSheet(
+            FullScreenFocusTimerScreen(
                 routine = currentRoutine,
-                onDismiss = { focusModeRoutine = null },
-                onFinishAndComplete = { durationSeconds ->
-                    viewModel.saveFocusSession(
-                        routineId = currentRoutine.id,
-                        durationSeconds = durationSeconds,
-                        markRoutineComplete = true,
-                        date = today
-                    )
-                    focusModeRoutine = null
-                }
-            )
-        }
-
-        // Stopwatch Bottom Sheet (Elapsed timer for single-time routines)
-        stopwatchRoutine?.let { routine ->
-            val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
-            StopwatchBottomSheet(
-                routine = currentRoutine,
-                onDismiss = { stopwatchRoutine = null },
-                onFinishAndComplete = { durationSeconds ->
-                    viewModel.saveFocusSession(
-                        routineId = currentRoutine.id,
-                        durationSeconds = durationSeconds,
-                        markRoutineComplete = true,
-                        date = today
-                    )
-                    stopwatchRoutine = null
-                }
+                today = today,
+                uiState = uiState,
+                viewModel = viewModel,
+                onDismiss = { fullScreenFocusRoutine = null }
             )
         }
 
@@ -1687,19 +1658,20 @@ fun CarouselRoutineCard(
                     }
 
                     // Information (İ) Button (Odak Modu & Alt Adımlar)
-                    IconButton(
-                        onClick = onOpenInfo,
+                    Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .background(Color(0x22FFFFFF))
                             .border(1.dp, GlassCardBorderSubtle, CircleShape)
+                            .clickable { onOpenInfo() },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Info,
                             contentDescription = "Rutin Seçenekleri",
                             tint = if (routine.isRange) AccentTeal else AccentPurple,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }

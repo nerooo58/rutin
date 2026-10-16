@@ -15,9 +15,9 @@ import android.widget.Toast
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.FileProvider
-import com.nororoutine.batu.model.DAY_STRING_TO_INT
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineLog
+import com.nororoutine.batu.network.GeminiStoryAnalysis
 import com.nororoutine.batu.viewmodel.RutinUiState
 import java.io.File
 import java.io.FileOutputStream
@@ -56,25 +56,26 @@ data class StoryCardData(
     val period: StoryPeriod,
     val periodTitle: String,
     val dateSubtitle: String,
+    val targetRoutineName: String,
     val totalFocusSeconds: Int,
     val completedCount: Int,
     val totalCount: Int,
     val completionPercent: Int,
     val currentStreak: Int,
+    val top3Accomplishments: List<String>,
     val categoryStats: List<CategoryFocusStat>,
-    val topRoutineName: String?,
-    val topRoutineDuration: String?,
     val achievementBadge: String,
-    val motivationalQuote: String
+    val motivationalQuote: String,
+    val isAiGenerated: Boolean = false
 ) {
     val totalHours: Int get() = totalFocusSeconds / 3600
     val totalMinutes: Int get() = (totalFocusSeconds % 3600) / 60
     val formattedTotalFocus: String
         get() = when {
-            totalHours > 0 && totalMinutes > 0 -> "${totalHours}sa ${totalMinutes}dk"
+            totalHours > 0 && totalMinutes > 0 -> "${totalHours} saat ${totalMinutes} dk"
             totalHours > 0 -> "${totalHours} saat"
             totalMinutes > 0 -> "${totalMinutes} dakika"
-            totalFocusSeconds > 0 -> "${totalFocusSeconds} sn"
+            totalFocusSeconds > 0 -> "${totalFocusSeconds} saniye"
             else -> "0 dakika"
         }
 
@@ -82,21 +83,23 @@ data class StoryCardData(
         val sb = StringBuilder()
         sb.append("🌟 Rutin Başarı Hikayem 🚀\n")
         sb.append("📅 Dönem: $dateSubtitle ($periodTitle)\n")
-        sb.append("⏱️ Toplam Odak: $formattedTotalFocus\n")
-        sb.append("✅ Tamamlama: %$completionPercent ($completedCount/$totalCount Rutin)\n")
+        sb.append("🎯 Kapsam: $targetRoutineName\n")
+        sb.append("⏱️ Toplam Tutulan Süre: $formattedTotalFocus\n")
         if (currentStreak > 0) {
             sb.append("🔥 Seri: $currentStreak Gün!\n")
         }
-        if (categoryStats.isNotEmpty()) {
-            sb.append("\n🎯 Odak Dağılımı:\n")
-            categoryStats.take(4).forEach { cat ->
-                sb.append("• ${cat.category}: ${cat.formattedDuration}\n")
+
+        if (top3Accomplishments.isNotEmpty()) {
+            sb.append("\n🏆 Bu Sürede Neler Yapıldı (Top 3):\n")
+            top3Accomplishments.take(3).forEach { item ->
+                sb.append("• ${item.removePrefix("•").trim()}\n")
             }
         }
-        if (!topRoutineName.isNullOrBlank() && !topRoutineDuration.isNullOrBlank()) {
-            sb.append("⭐ En Çok Odaklanılan: $topRoutineName ($topRoutineDuration)\n")
-        }
+
         sb.append("\n\"$motivationalQuote\"\n")
+        if (isAiGenerated) {
+            sb.append("🤖 Yapay Zeka (Gemini) Destekli Rapor\n")
+        }
         sb.append("✨ Rutin App ile takip edildi.")
         return sb.toString()
     }
@@ -107,152 +110,192 @@ object StoryCardHelper {
     fun computeStoryData(
         period: StoryPeriod,
         uiState: RutinUiState,
-        anchorDate: LocalDate = LocalDate.now()
+        anchorDate: LocalDate = LocalDate.now(),
+        selectedRoutineId: String? = null,
+        aiAnalysis: GeminiStoryAnalysis? = null
     ): StoryCardData {
         val locale = Locale("tr", "TR")
         val routines = uiState.routines
         val logs = uiState.logs
         val streak = uiState.stats.currentStreak
 
-        return when (period) {
+        val targetRoutine = routines.find { it.id == selectedRoutineId }
+        val targetRoutineName = targetRoutine?.name ?: "Tüm Rutinler"
+
+        // 1. Filter Logs by Period Date Range
+        val filteredLogs = when (period) {
             StoryPeriod.DAILY -> {
                 val dateStr = anchorDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val dayOfWeek = anchorDate.dayOfWeek.value
-                val dayRoutines = routines.filter { it.daysIntSet.contains(dayOfWeek) }
-                val totalCount = dayRoutines.size
-                val completedLogs = logs.values.filter { it.date == dateStr && it.isDone }
-                val completedCount = completedLogs.size
-                val percent = if (totalCount > 0) (completedCount * 100 / totalCount).coerceIn(0, 100) else 0
-
-                val categoryStats = calculateCategoryStats(completedLogs, routines)
-                val totalSeconds = categoryStats.sumOf { it.totalSeconds }
-                val (topName, topDur) = findTopRoutine(completedLogs, routines)
-
-                val (badge, quote) = getMotivationalQuote(percent, streak)
-
-                StoryCardData(
-                    period = period,
-                    periodTitle = "Günün Başarısı",
-                    dateSubtitle = anchorDate.format(DateTimeFormatter.ofPattern("d MMMM yyyy, EEEE", locale)),
-                    totalFocusSeconds = totalSeconds,
-                    completedCount = completedCount,
-                    totalCount = totalCount,
-                    completionPercent = percent,
-                    currentStreak = streak,
-                    categoryStats = categoryStats,
-                    topRoutineName = topName,
-                    topRoutineDuration = topDur,
-                    achievementBadge = badge,
-                    motivationalQuote = quote
-                )
+                logs.values.filter { it.date == dateStr }
             }
-
             StoryPeriod.WEEKLY -> {
                 val monday = anchorDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                 val sunday = anchorDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
                 val mondayStr = monday.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 val sundayStr = sunday.format(DateTimeFormatter.ISO_LOCAL_DATE)
-
-                val weekLogs = logs.values.filter { it.date in mondayStr..sundayStr && it.isDone }
-                val completedCount = weekLogs.size
-                val totalWeekly = uiState.stats.weeklyTotal.takeIf { it > 0 } ?: (routines.size * 5)
-                val percent = if (totalWeekly > 0) (completedCount * 100 / totalWeekly).coerceIn(0, 100) else uiState.stats.weeklyPercent
-
-                val categoryStats = calculateCategoryStats(weekLogs, routines)
-                val totalSeconds = categoryStats.sumOf { it.totalSeconds }
-                val (topName, topDur) = findTopRoutine(weekLogs, routines)
-
-                val (badge, quote) = getMotivationalQuote(percent, streak)
-
-                val rangeLabel = "${monday.dayOfMonth} – ${sunday.dayOfMonth} ${sunday.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))}"
-                StoryCardData(
-                    period = period,
-                    periodTitle = "Haftalık Rapor",
-                    dateSubtitle = rangeLabel,
-                    totalFocusSeconds = totalSeconds,
-                    completedCount = completedCount,
-                    totalCount = totalWeekly,
-                    completionPercent = percent,
-                    currentStreak = streak,
-                    categoryStats = categoryStats,
-                    topRoutineName = topName,
-                    topRoutineDuration = topDur,
-                    achievementBadge = badge,
-                    motivationalQuote = quote
-                )
+                logs.values.filter { it.date in mondayStr..sundayStr }
             }
-
             StoryPeriod.MONTHLY -> {
                 val yearMonthPrefix = anchorDate.format(DateTimeFormatter.ofPattern("yyyy-MM"))
-                val monthLogs = logs.values.filter { it.date.startsWith(yearMonthPrefix) && it.isDone }
-                val completedCount = monthLogs.size
-                val totalMonthly = uiState.stats.monthlyTotal.takeIf { it > 0 } ?: (routines.size * 22)
-                val percent = if (totalMonthly > 0) (completedCount * 100 / totalMonthly).coerceIn(0, 100) else uiState.stats.monthlyPercent
-
-                val categoryStats = calculateCategoryStats(monthLogs, routines)
-                val totalSeconds = categoryStats.sumOf { it.totalSeconds }
-                val (topName, topDur) = findTopRoutine(monthLogs, routines)
-
-                val (badge, quote) = getMotivationalQuote(percent, streak)
-
-                StoryCardData(
-                    period = period,
-                    periodTitle = "Aylık Rapor",
-                    dateSubtitle = anchorDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)).replaceFirstChar { it.uppercase() },
-                    totalFocusSeconds = totalSeconds,
-                    completedCount = completedCount,
-                    totalCount = totalMonthly,
-                    completionPercent = percent,
-                    currentStreak = streak,
-                    categoryStats = categoryStats,
-                    topRoutineName = topName,
-                    topRoutineDuration = topDur,
-                    achievementBadge = badge,
-                    motivationalQuote = quote
-                )
+                logs.values.filter { it.date.startsWith(yearMonthPrefix) }
             }
-
             StoryPeriod.YEARLY -> {
                 val yearPrefix = anchorDate.year.toString()
-                val yearLogs = logs.values.filter { it.date.startsWith(yearPrefix) && it.isDone }
-                val completedCount = yearLogs.size
-                val totalYearly = uiState.stats.yearlyTotal.takeIf { it > 0 } ?: (routines.size * 260)
-                val percent = if (totalYearly > 0) (completedCount * 100 / totalYearly).coerceIn(0, 100) else uiState.stats.yearlyPercent
-
-                val categoryStats = calculateCategoryStats(yearLogs, routines)
-                val totalSeconds = categoryStats.sumOf { it.totalSeconds }
-                val (topName, topDur) = findTopRoutine(yearLogs, routines)
-
-                val (badge, quote) = getMotivationalQuote(percent, streak)
-
-                StoryCardData(
-                    period = period,
-                    periodTitle = "Yıllık Başarı",
-                    dateSubtitle = "${anchorDate.year} Yılı Özeti",
-                    totalFocusSeconds = totalSeconds,
-                    completedCount = completedCount,
-                    totalCount = totalYearly,
-                    completionPercent = percent,
-                    currentStreak = streak,
-                    categoryStats = categoryStats,
-                    topRoutineName = topName,
-                    topRoutineDuration = topDur,
-                    achievementBadge = badge,
-                    motivationalQuote = quote
-                )
+                logs.values.filter { it.date.startsWith(yearPrefix) }
             }
         }
+
+        // 2. Filter by Specific Routine if selected
+        val periodLogs = if (selectedRoutineId != null) {
+            filteredLogs.filter { it.routineId == selectedRoutineId }
+        } else {
+            filteredLogs
+        }
+
+        // 3. Compute Focus Time Strictly From Recorded Times
+        val totalSeconds = periodLogs.sumOf { log ->
+            if (log.focusDurationSeconds > 0) {
+                log.focusDurationSeconds
+            } else if (log.isDone) {
+                val r = routines.find { it.id == log.routineId }
+                if (r != null && r.durationMinutes > 0) r.durationMinutes * 60 else 0
+            } else {
+                0
+            }
+        }
+
+        // 4. Compute Counts & Percentage
+        val completedCount = periodLogs.count { it.isDone }
+        val totalExpected = if (selectedRoutineId != null) {
+            when (period) {
+                StoryPeriod.DAILY -> 1
+                StoryPeriod.WEEKLY -> 7
+                StoryPeriod.MONTHLY -> 30
+                StoryPeriod.YEARLY -> 365
+            }
+        } else {
+            when (period) {
+                StoryPeriod.DAILY -> routines.size.coerceAtLeast(1)
+                StoryPeriod.WEEKLY -> (routines.size * 5).coerceAtLeast(1)
+                StoryPeriod.MONTHLY -> (routines.size * 22).coerceAtLeast(1)
+                StoryPeriod.YEARLY -> (routines.size * 260).coerceAtLeast(1)
+            }
+        }
+        val percent = if (totalExpected > 0) (completedCount * 100 / totalExpected).coerceIn(0, 100) else 0
+
+        // 5. Extract User Session Notes & Descriptions
+        val rawSessionNotes = mutableListOf<String>()
+        for (log in periodLogs) {
+            val rName = routines.find { it.id == log.routineId }?.name ?: ""
+            if (log.focusSessionNotes.isNotEmpty()) {
+                for (noteEntry in log.focusSessionNotes) {
+                    val parts = noteEntry.split("|")
+                    val note = if (parts.size >= 3) parts[2] else noteEntry
+                    val secs = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                    val durStr = if (secs > 0) "${secs / 60} dk" else ""
+                    val item = if (selectedRoutineId == null) {
+                        "$rName: $note ($durStr)".trim()
+                    } else {
+                        "$note ($durStr)".trim()
+                    }
+                    rawSessionNotes.add(item)
+                }
+            } else if (log.note.isNotBlank()) {
+                val item = if (selectedRoutineId == null) "$rName: ${log.note}" else log.note
+                rawSessionNotes.add(item)
+            }
+        }
+
+        // 6. Category stats
+        val categoryStats = calculateCategoryStats(periodLogs.filter { it.isDone || it.focusDurationSeconds > 0 }, routines)
+
+        // 7. Extract Top 3 Accomplishments (From AI if available, or extracted from user notes)
+        val top3: List<String>
+        val quote: String
+        val isAi: Boolean
+
+        if (aiAnalysis != null && aiAnalysis.topHighlights.isNotEmpty()) {
+            top3 = aiAnalysis.topHighlights.take(3)
+            quote = aiAnalysis.motivationalQuote
+            isAi = aiAnalysis.isAiGenerated
+        } else {
+            isAi = false
+            val localExtracted = mutableListOf<String>()
+            for (item in rawSessionNotes) {
+                val clean = item.trim()
+                if (clean.isNotBlank() && !localExtracted.contains(clean)) {
+                    localExtracted.add("• $clean")
+                }
+            }
+
+            if (localExtracted.isNotEmpty()) {
+                top3 = localExtracted.take(3)
+            } else if (categoryStats.isNotEmpty()) {
+                top3 = categoryStats.take(3).map { "• ${it.category}: ${it.formattedDuration} odaklanıldı" }
+            } else {
+                top3 = listOf(
+                    "• $targetRoutineName: Disiplinli seans tamamlandı",
+                    "• Odak süresi hedefine ulaşıldı",
+                    "• Rutin takibi aksatılmadı"
+                )
+            }
+
+            val (badge, defaultQuote) = getMotivationalQuote(percent, streak)
+            quote = defaultQuote
+        }
+
+        val (badge, _) = getMotivationalQuote(percent, streak)
+
+        val (periodTitle, dateSubtitle) = when (period) {
+            StoryPeriod.DAILY -> Pair(
+                "Günün Başarısı",
+                anchorDate.format(DateTimeFormatter.ofPattern("d MMMM yyyy, EEEE", locale))
+            )
+            StoryPeriod.WEEKLY -> {
+                val mon = anchorDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                val sun = anchorDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY))
+                Pair(
+                    "Haftalık Rapor",
+                    "${mon.dayOfMonth} – ${sun.dayOfMonth} ${sun.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale))}"
+                )
+            }
+            StoryPeriod.MONTHLY -> Pair(
+                "Aylık Rapor",
+                anchorDate.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)).replaceFirstChar { it.uppercase() }
+            )
+            StoryPeriod.YEARLY -> Pair(
+                "Yıllık Başarı",
+                "${anchorDate.year} Yılı Özeti"
+            )
+        }
+
+        return StoryCardData(
+            period = period,
+            periodTitle = periodTitle,
+            dateSubtitle = dateSubtitle,
+            targetRoutineName = targetRoutineName,
+            totalFocusSeconds = totalSeconds,
+            completedCount = completedCount,
+            totalCount = totalExpected,
+            completionPercent = percent,
+            currentStreak = streak,
+            top3Accomplishments = top3,
+            categoryStats = categoryStats,
+            achievementBadge = if (isAi) "🤖 AI Destekli Rapor" else badge,
+            motivationalQuote = quote,
+            isAiGenerated = isAi
+        )
     }
 
     private fun calculateCategoryStats(
-        completedLogs: List<RoutineLog>,
+        logs: List<RoutineLog>,
         routines: List<Routine>
     ): List<CategoryFocusStat> {
         val routineMap = routines.associateBy { it.id }
         val categorySeconds = mutableMapOf<String, Int>()
         val categoryCounts = mutableMapOf<String, Int>()
 
-        for (log in completedLogs) {
+        for (log in logs) {
             val routine = routineMap[log.routineId] ?: continue
             val cat = routine.category.ifBlank { "Genel" }
             val seconds = if (log.focusDurationSeconds > 0) {
@@ -260,10 +303,12 @@ object StoryCardHelper {
             } else if (routine.durationMinutes > 0) {
                 routine.durationMinutes * 60
             } else {
-                15 * 60 // 15 min estimated completion time
+                0
             }
-            categorySeconds[cat] = (categorySeconds[cat] ?: 0) + seconds
-            categoryCounts[cat] = (categoryCounts[cat] ?: 0) + 1
+            if (seconds > 0) {
+                categorySeconds[cat] = (categorySeconds[cat] ?: 0) + seconds
+                categoryCounts[cat] = (categoryCounts[cat] ?: 0) + 1
+            }
         }
 
         val colors = listOf(
@@ -287,49 +332,18 @@ object StoryCardHelper {
             }
     }
 
-    private fun findTopRoutine(
-        completedLogs: List<RoutineLog>,
-        routines: List<Routine>
-    ): Pair<String?, String?> {
-        val routineMap = routines.associateBy { it.id }
-        val routineSeconds = mutableMapOf<String, Int>()
-
-        for (log in completedLogs) {
-            val routine = routineMap[log.routineId] ?: continue
-            val seconds = if (log.focusDurationSeconds > 0) {
-                log.focusDurationSeconds
-            } else if (routine.durationMinutes > 0) {
-                routine.durationMinutes * 60
-            } else {
-                15 * 60
-            }
-            routineSeconds[routine.name] = (routineSeconds[routine.name] ?: 0) + seconds
-        }
-
-        val top = routineSeconds.maxByOrNull { it.value } ?: return Pair(null, null)
-        val h = top.value / 3600
-        val m = (top.value % 3600) / 60
-        val durStr = when {
-            h > 0 && m > 0 -> "${h}sa ${m}dk"
-            h > 0 -> "${h} saat"
-            m > 0 -> "${m} dakika"
-            else -> "${top.value} sn"
-        }
-        return Pair(top.key, durStr)
-    }
-
     private fun getMotivationalQuote(percent: Int, streak: Int): Pair<String, String> {
         return when {
-            percent >= 90 && streak >= 5 -> Pair("🏆 Kusursuz Ritim", "Muhteşem bir istikrar ve disiplin sergiliyorsun!")
-            percent >= 80 -> Pair("🌟 Harika Odaklanma", "Günün ve dönemin hedeflerine güçlü adımlarla ulaştın.")
-            percent >= 60 -> Pair("🔥 Yüksek Verim", "Ritmini koruyorsun, her çaba geleceğe büyük bir yatırım.")
-            percent >= 40 -> Pair("✨ Kararlı Gelişim", "Süreklilik mükemmellikten daha değerlidir, harika gidiyorsun!")
-            else -> Pair("🌱 Yeni Başlangıç", "Küçük rutinler büyük başarıların tohumudur. Devam et!")
+            percent >= 90 && streak >= 7 -> Pair("🔥 ZİRVE ODAKLANMA", "Her gün küçük adımlar, devasa başarılar yaratır.")
+            percent >= 80 -> Pair("⭐ YÜKSEK PERFORMANS", "Zamanını kontrol eden, geleceğini inşa eder.")
+            percent >= 60 -> Pair("🚀 GÜÇLÜ İLERLEME", "Süreklilik yetenekten daha güçlüdür.")
+            percent >= 30 -> Pair("🌱 İVME KAZANIYOR", "Başlamak yolun yarısıdır, devam et!")
+            else -> Pair("✨ YENİ BİR ADIM", "Her yeni an, yeni bir odaklanma fırsatıdır.")
         }
     }
 
     /**
-     * Renders a pristine 1080x1920 9:16 high-resolution Instagram / WhatsApp story bitmap
+     * Draws the pristine 9:16 Instagram Stories & WhatsApp Status Bitmap (1080x1920)
      */
     fun createStoryBitmap(context: Context, data: StoryCardData): Bitmap {
         val width = 1080
@@ -337,14 +351,14 @@ object StoryCardHelper {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 1. Deep Midnight Background Gradient
+        // 1. Deep Midnight Gradient Background
         val bgPaint = Paint().apply {
             shader = LinearGradient(
                 0f, 0f, 0f, height.toFloat(),
                 intArrayOf(
-                    android.graphics.Color.parseColor("#090714"),
-                    android.graphics.Color.parseColor("#121026"),
-                    android.graphics.Color.parseColor("#181B36")
+                    android.graphics.Color.parseColor("#080614"),
+                    android.graphics.Color.parseColor("#100E26"),
+                    android.graphics.Color.parseColor("#181A38")
                 ),
                 null,
                 Shader.TileMode.CLAMP
@@ -352,44 +366,40 @@ object StoryCardHelper {
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        // 2. Ambient Glow Mesh Circles
+        // 2. Ambient Glow Mesh
         val glowPaintTeal = Paint().apply {
             shader = RadialGradient(
-                width * 0.85f, height * 0.22f, 480f,
+                width * 0.85f, height * 0.20f, 500f,
                 intArrayOf(android.graphics.Color.parseColor("#337CF4DE"), android.graphics.Color.TRANSPARENT),
                 null,
                 Shader.TileMode.CLAMP
             )
         }
-        canvas.drawCircle(width * 0.85f, height * 0.22f, 480f, glowPaintTeal)
+        canvas.drawCircle(width * 0.85f, height * 0.20f, 500f, glowPaintTeal)
 
         val glowPaintPurple = Paint().apply {
             shader = RadialGradient(
-                width * 0.15f, height * 0.70f, 520f,
+                width * 0.15f, height * 0.65f, 540f,
                 intArrayOf(android.graphics.Color.parseColor("#44A78BFA"), android.graphics.Color.TRANSPARENT),
                 null,
                 Shader.TileMode.CLAMP
             )
         }
-        canvas.drawCircle(width * 0.15f, height * 0.70f, 520f, glowPaintPurple)
+        canvas.drawCircle(width * 0.15f, height * 0.65f, 540f, glowPaintPurple)
 
-        // 3. Main Glass Frame (Border)
+        // 3. Main Glass Frame Border
         val frameRect = RectF(50f, 80f, width - 50f, height - 90f)
         val framePaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#14FFFFFF")
+            color = android.graphics.Color.parseColor("#18FFFFFF")
             style = Paint.Style.STROKE
             strokeWidth = 3f
             isAntiAlias = true
         }
         canvas.drawRoundRect(frameRect, 48f, 48f, framePaint)
 
-        // Text Paints
-        val textPaint = Paint().apply {
-            isAntiAlias = true
-            color = android.graphics.Color.WHITE
-        }
+        val textPaint = Paint().apply { isAntiAlias = true }
 
-        // Header: App Logo & Badge
+        // 4. Header: App Branding & Scope
         textPaint.apply {
             textSize = 34f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -397,16 +407,17 @@ object StoryCardHelper {
             textAlign = Paint.Align.CENTER
             color = android.graphics.Color.parseColor("#FFA78BFA")
         }
-        canvas.drawText("✦ RUTİN • BAŞARI HİKAYESİ ✦", width / 2f, 170f, textPaint)
+        canvas.drawText("✦ RUTİN • ODAK BAŞARI RAPORU ✦", width / 2f, 170f, textPaint)
 
-        // Period Title & Date
+        // Scope / Routine Title
         textPaint.apply {
-            textSize = 58f
+            textSize = 62f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = -0.02f
             color = android.graphics.Color.WHITE
         }
-        canvas.drawText(data.periodTitle, width / 2f, 255f, textPaint)
+        val titleText = if (data.targetRoutineName == "Tüm Rutinler") data.periodTitle else data.targetRoutineName
+        canvas.drawText(titleText.take(24), width / 2f, 260f, textPaint)
 
         textPaint.apply {
             textSize = 32f
@@ -414,14 +425,14 @@ object StoryCardHelper {
             color = android.graphics.Color.parseColor("#B3FFFFFF")
             letterSpacing = 0.02f
         }
-        canvas.drawText(data.dateSubtitle, width / 2f, 310f, textPaint)
+        canvas.drawText("${data.dateSubtitle} • ${data.periodTitle}", width / 2f, 315f, textPaint)
 
-        // 4. Hero Card: Toplam Odak Süresi
-        val heroRect = RectF(90f, 370f, width - 90f, 740f)
+        // 5. Hero Card: Toplam Tutulan Süre
+        val heroRect = RectF(90f, 370f, width - 90f, 680f)
         val heroBg = Paint().apply {
             shader = LinearGradient(
                 heroRect.left, heroRect.top, heroRect.right, heroRect.bottom,
-                intArrayOf(android.graphics.Color.parseColor("#26382B6B"), android.graphics.Color.parseColor("#1F1E3860")),
+                intArrayOf(android.graphics.Color.parseColor("#2E33266B"), android.graphics.Color.parseColor("#241D3B60")),
                 null,
                 Shader.TileMode.CLAMP
             )
@@ -430,9 +441,9 @@ object StoryCardHelper {
         canvas.drawRoundRect(heroRect, 36f, 36f, heroBg)
 
         val heroBorder = Paint().apply {
-            color = android.graphics.Color.parseColor("#4DA78BFA")
+            color = android.graphics.Color.parseColor("#66A78BFA")
             style = Paint.Style.STROKE
-            strokeWidth = 2.5f
+            strokeWidth = 3f
             isAntiAlias = true
         }
         canvas.drawRoundRect(heroRect, 36f, 36f, heroBorder)
@@ -444,190 +455,164 @@ object StoryCardHelper {
             color = android.graphics.Color.parseColor("#CC7CF4DE")
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("TOPLAM ODAKLANMA SÜRESİ", width / 2f, 440f, textPaint)
+        canvas.drawText("TOPLAM TUTULAN ODAK SÜRESİ", width / 2f, 440f, textPaint)
 
         // Duration Big Text
         textPaint.apply {
-            textSize = 96f
+            textSize = 88f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.WHITE
-            letterSpacing = -0.03f
+            letterSpacing = -0.02f
         }
-        canvas.drawText(data.formattedTotalFocus, width / 2f, 555f, textPaint)
+        canvas.drawText(data.formattedTotalFocus, width / 2f, 545f, textPaint)
 
-        // Two Pills: % Tamamlama & Seri
-        val pillY = 620f
-        val pillHeight = 70f
-        val leftPillRect = RectF(130f, pillY, 510f, pillY + pillHeight)
-        val rightPillRect = RectF(570f, pillY, width - 130f, pillY + pillHeight)
-
-        val greenPillPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#264ADE80")
+        // Tag: AI or Routine
+        val tagY = 600f
+        val tagRect = RectF(width / 2f - 240f, tagY, width / 2f + 240f, tagY + 54f)
+        val tagBg = Paint().apply {
+            color = if (data.isAiGenerated) android.graphics.Color.parseColor("#338B5CF6") else android.graphics.Color.parseColor("#3310B981")
             isAntiAlias = true
         }
-        canvas.drawRoundRect(leftPillRect, 35f, 35f, greenPillPaint)
-        val greenPillBorder = Paint().apply {
-            color = android.graphics.Color.parseColor("#804ADE80")
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-            isAntiAlias = true
-        }
-        canvas.drawRoundRect(leftPillRect, 35f, 35f, greenPillBorder)
+        canvas.drawRoundRect(tagRect, 27f, 27f, tagBg)
 
         textPaint.apply {
-            textSize = 28f
+            textSize = 26f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = android.graphics.Color.parseColor("#FF4ADE80")
+            color = if (data.isAiGenerated) android.graphics.Color.parseColor("#FFA78BFA") else android.graphics.Color.parseColor("#FF4ADE80")
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("✓ %${data.completionPercent} (${data.completedCount}/${data.totalCount})", (leftPillRect.left + leftPillRect.right) / 2f, pillY + 45f, textPaint)
+        val badgeLabel = if (data.isAiGenerated) "🤖 Yapay Zeka (Gemini) Analizi" else "⏱️ Kaydedilen Odak Seansları"
+        canvas.drawText(badgeLabel, width / 2f, tagY + 37f, textPaint)
 
-        val amberPillPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#33FBBF24")
-            isAntiAlias = true
-        }
-        canvas.drawRoundRect(rightPillRect, 35f, 35f, amberPillPaint)
-        val amberPillBorder = Paint().apply {
-            color = android.graphics.Color.parseColor("#80FBBF24")
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-            isAntiAlias = true
-        }
-        canvas.drawRoundRect(rightPillRect, 35f, 35f, amberPillBorder)
-
-        textPaint.color = android.graphics.Color.parseColor("#FFFBBF24")
-        val streakText = if (data.currentStreak > 0) "🔥 ${data.currentStreak} Gün Seri" else "✨ Aktif Ritim"
-        canvas.drawText(streakText, (rightPillRect.left + rightPillRect.right) / 2f, pillY + 45f, textPaint)
-
-        // 5. Section: Odak Dağılımı (Ders, Spor, Zihin vs.)
+        // 6. Section: Bu Sürede Neler Yapıldı? (En Çok Yapılan 3 Şey)
+        var curY = 740f
         textPaint.apply {
-            textSize = 32f
-            letterSpacing = 0.10f
+            textSize = 34f
+            letterSpacing = 0.08f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = android.graphics.Color.parseColor("#B3FFFFFF")
+            color = android.graphics.Color.parseColor("#FF7CF4DE")
             textAlign = Paint.Align.LEFT
         }
-        canvas.drawText("KATEGORİ BAZLI ODAK SÜRELERİ", 100f, 820f, textPaint)
+        canvas.drawText("🏆 BU SÜREDE NELER YAPILDI? (EN ÇOK YAPILAN 3 ŞEY)", 100f, curY, textPaint)
 
-        var curY = 870f
-        val maxSeconds = data.categoryStats.maxOfOrNull { it.totalSeconds }?.coerceAtLeast(1) ?: 1
-
-        val barBgPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#1AFFFFFF")
-            isAntiAlias = true
-        }
-
-        val catsToDraw = data.categoryStats.take(4)
-        if (catsToDraw.isNotEmpty()) {
-            for (cat in catsToDraw) {
-                // Category Label
-                textPaint.apply {
-                    textSize = 30f
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    color = android.graphics.Color.WHITE
-                    textAlign = Paint.Align.LEFT
-                }
-                canvas.drawText(cat.category, 100f, curY + 30f, textPaint)
-
-                // Duration text on the right
-                textPaint.apply {
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    color = cat.color.toArgb()
-                    textAlign = Paint.Align.RIGHT
-                }
-                canvas.drawText(cat.formattedDuration, width - 100f, curY + 30f, textPaint)
-
-                // Progress Bar
-                val barRect = RectF(100f, curY + 48f, width - 100f, curY + 66f)
-                canvas.drawRoundRect(barRect, 9f, 9f, barBgPaint)
-
-                val ratio = (cat.totalSeconds.toFloat() / maxSeconds.toFloat()).coerceIn(0.08f, 1f)
-                val fillRect = RectF(100f, curY + 48f, 100f + (width - 200f) * ratio, curY + 66f)
-                val fillPaint = Paint().apply {
-                    color = cat.color.toArgb()
-                    isAntiAlias = true
-                }
-                canvas.drawRoundRect(fillRect, 9f, 9f, fillPaint)
-
-                curY += 105f
-            }
-        } else {
-            textPaint.apply {
-                textSize = 28f
-                color = android.graphics.Color.parseColor("#80FFFFFF")
-                textAlign = Paint.Align.CENTER
-            }
-            canvas.drawText("Henüz kaydedilmiş odak süresi bulunmuyor.", width / 2f, curY + 50f, textPaint)
-            curY += 100f
-        }
-
-        // 6. Top Routine Spotlight (if available)
-        if (!data.topRoutineName.isNullOrBlank() && !data.topRoutineDuration.isNullOrBlank()) {
-            val spotRect = RectF(90f, curY + 30f, width - 90f, curY + 160f)
-            val spotBg = Paint().apply {
-                color = android.graphics.Color.parseColor("#22201944")
+        curY += 40f
+        val itemsToDraw = data.top3Accomplishments.take(3)
+        if (itemsToDraw.isNotEmpty()) {
+            val cardBg = Paint().apply {
+                color = android.graphics.Color.parseColor("#1F1C2B47")
                 isAntiAlias = true
             }
-            canvas.drawRoundRect(spotRect, 28f, 28f, spotBg)
-            val spotBorder = Paint().apply {
-                color = android.graphics.Color.parseColor("#33A78BFA")
+            val cardBorder = Paint().apply {
+                color = android.graphics.Color.parseColor("#26FFFFFF")
                 style = Paint.Style.STROKE
                 strokeWidth = 2f
                 isAntiAlias = true
             }
-            canvas.drawRoundRect(spotRect, 28f, 28f, spotBorder)
 
-            textPaint.apply {
-                textSize = 26f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                color = android.graphics.Color.parseColor("#FFA78BFA")
-                textAlign = Paint.Align.LEFT
+            for ((idx, item) in itemsToDraw.withIndex()) {
+                val cleanText = item.removePrefix("•").trim()
+                val itemRect = RectF(90f, curY, width - 90f, curY + 120f)
+                canvas.drawRoundRect(itemRect, 24f, 24f, cardBg)
+                canvas.drawRoundRect(itemRect, 24f, 24f, cardBorder)
+
+                // Index badge
+                val badgeCirclePaint = Paint().apply {
+                    color = when (idx) {
+                        0 -> android.graphics.Color.parseColor("#FF7CF4DE")
+                        1 -> android.graphics.Color.parseColor("#FFA78BFA")
+                        else -> android.graphics.Color.parseColor("#FFFBBF24")
+                    }
+                    isAntiAlias = true
+                }
+                canvas.drawCircle(150f, curY + 60f, 24f, badgeCirclePaint)
+
+                textPaint.apply {
+                    textSize = 28f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = android.graphics.Color.parseColor("#0F172A")
+                    textAlign = Paint.Align.CENTER
+                }
+                canvas.drawText("${idx + 1}", 150f, curY + 70f, textPaint)
+
+                // Item description text
+                textPaint.apply {
+                    textSize = 32f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = android.graphics.Color.WHITE
+                    textAlign = Paint.Align.LEFT
+                }
+                canvas.drawText(cleanText.take(40), 200f, curY + 70f, textPaint)
+
+                curY += 140f
             }
-            canvas.drawText("⭐ EN ÇOK ODAKLANILAN RUTİN", 130f, curY + 75f, textPaint)
-
-            textPaint.apply {
-                textSize = 34f
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                color = android.graphics.Color.WHITE
-            }
-            canvas.drawText(data.topRoutineName, 130f, curY + 125f, textPaint)
-
-            textPaint.apply {
-                textSize = 32f
-                color = android.graphics.Color.parseColor("#FF7CF4DE")
-                textAlign = Paint.Align.RIGHT
-            }
-            canvas.drawText(data.topRoutineDuration, width - 130f, curY + 125f, textPaint)
-
-            curY += 180f
         } else {
-            curY += 30f
+            textPaint.apply {
+                textSize = 30f
+                color = android.graphics.Color.parseColor("#80FFFFFF")
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("Bu dönemde kaydedilmiş seans detayı bulunamadı.", width / 2f, curY + 60f, textPaint)
+            curY += 140f
         }
 
-        // 7. Motivational Quote & Badge Card
-        val quoteRect = RectF(90f, curY + 20f, width - 90f, curY + 200f)
+        // 7. Category Distribution Bar if Available
+        if (data.categoryStats.isNotEmpty()) {
+            curY += 20f
+            textPaint.apply {
+                textSize = 28f
+                letterSpacing = 0.08f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                color = android.graphics.Color.parseColor("#B3FFFFFF")
+                textAlign = Paint.Align.LEFT
+            }
+            canvas.drawText("KATEGORİ DAĞILIMI", 100f, curY, textPaint)
+            curY += 40f
+
+            val cat = data.categoryStats.firstOrNull()
+            if (cat != null) {
+                textPaint.apply {
+                    textSize = 30f
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    color = android.graphics.Color.WHITE
+                }
+                canvas.drawText("• En Çok: ${cat.category} (${cat.formattedDuration})", 100f, curY, textPaint)
+                curY += 50f
+            }
+        }
+
+        // 8. Motivational Quote Card
+        curY += 30f
+        val quoteRect = RectF(90f, curY, width - 90f, curY + 200f)
         val quoteBg = Paint().apply {
-            color = android.graphics.Color.parseColor("#1AFFFFFF")
+            color = android.graphics.Color.parseColor("#22201944")
             isAntiAlias = true
         }
         canvas.drawRoundRect(quoteRect, 28f, 28f, quoteBg)
 
+        val quoteBorder = Paint().apply {
+            color = android.graphics.Color.parseColor("#44A78BFA")
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            isAntiAlias = true
+        }
+        canvas.drawRoundRect(quoteRect, 28f, 28f, quoteBorder)
+
         textPaint.apply {
-            textSize = 32f
+            textSize = 30f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.parseColor("#FF7CF4DE")
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(data.achievementBadge, width / 2f, curY + 80f, textPaint)
+        canvas.drawText(data.achievementBadge, width / 2f, curY + 70f, textPaint)
 
         textPaint.apply {
             textSize = 28f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-            color = android.graphics.Color.parseColor("#E6FFFFFF")
+            color = android.graphics.Color.parseColor("#F2FFFFFF")
         }
-        canvas.drawText("\"${data.motivationalQuote}\"", width / 2f, curY + 145f, textPaint)
+        canvas.drawText("\"${data.motivationalQuote.take(55)}\"", width / 2f, curY + 140f, textPaint)
 
-        // 8. Footer Watermark
+        // 9. Footer Watermark
         val footerY = height - 120f
         textPaint.apply {
             textSize = 26f
@@ -636,7 +621,7 @@ object StoryCardHelper {
             letterSpacing = 0.08f
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText("RUTİN APP • HER GÜN DAHA İYİ BİR SEN ✨", width / 2f, footerY, textPaint)
+        canvas.drawText("RUTİN APP • DİSİPLİN VE ODAK 🚀", width / 2f, footerY, textPaint)
 
         return bitmap
     }
