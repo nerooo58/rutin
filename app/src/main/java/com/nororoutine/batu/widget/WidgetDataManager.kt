@@ -69,6 +69,9 @@ object WidgetDataManager {
                     val daysArr = JSONArray()
                     r.days.forEach { daysArr.put(it) }
                     put("days", daysArr)
+                    val subtasksArr = JSONArray()
+                    r.subtasks.forEach { subtasksArr.put(it) }
+                    put("subtasks", subtasksArr)
                 }
                 rArray.put(obj)
             }
@@ -111,6 +114,13 @@ object WidgetDataManager {
                         daysList.add(daysArr.getString(j))
                     }
                 }
+                val subtasksArr = obj.optJSONArray("subtasks")
+                val subtasksList = mutableListOf<String>()
+                if (subtasksArr != null) {
+                    for (k in 0 until subtasksArr.length()) {
+                        subtasksList.add(subtasksArr.getString(k))
+                    }
+                }
                 list.add(
                     Routine(
                         id = obj.optString("id"),
@@ -121,7 +131,8 @@ object WidgetDataManager {
                         endTime = obj.optString("endTime").takeIf { it.isNotBlank() },
                         isSingleTime = obj.optBoolean("isSingleTime", true),
                         days = if (daysList.isEmpty()) listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz") else daysList,
-                        orderIndex = obj.optInt("orderIndex", 0)
+                        orderIndex = obj.optInt("orderIndex", 0),
+                        subtasks = subtasksList
                     )
                 )
             }

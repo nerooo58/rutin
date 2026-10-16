@@ -229,7 +229,8 @@ class FirestoreRepository {
                 "days" to toSave.days,
                 "notificationEnabled" to toSave.notificationEnabled,
                 "createdAt" to (toSave.createdAt ?: Timestamp.now()),
-                "orderIndex" to toSave.orderIndex
+                "orderIndex" to toSave.orderIndex,
+                "subtasks" to toSave.subtasks
             )
 
             firestore.collection(COLLECTION_ROUTINES).document(docId)
@@ -287,7 +288,9 @@ class FirestoreRepository {
                 "date" to log.date,
                 "status" to log.status,
                 "note" to log.note,
-                "completedAt" to (log.completedAt ?: Timestamp.now())
+                "completedAt" to (log.completedAt ?: Timestamp.now()),
+                "completedSubtasks" to log.completedSubtasks,
+                "focusDurationSeconds" to log.focusDurationSeconds
             )
 
             firestore.collection(COLLECTION_LOGS).document(docId)

@@ -36,7 +36,8 @@ data class Routine(
     val days: List<String> = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"),
     val notificationEnabled: Boolean = true,
     val createdAt: Timestamp? = null,
-    val orderIndex: Int = 0
+    val orderIndex: Int = 0,
+    val subtasks: List<String> = emptyList()
 ) {
     // Computed properties for Compose UI compatibility
     val illustrationId: String get() = imageId.ifEmpty { "meditasyon_calm" }
@@ -52,6 +53,19 @@ data class Routine(
                 val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
                 val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 h * 60 + m
+            } catch (e: Exception) {
+                0
+            }
+        }
+    val durationMinutes: Int
+        get() {
+            if (!isRange || endTime.isNullOrBlank()) return 0
+            return try {
+                val startParts = startTime.split(":")
+                val endParts = endTime.split(":")
+                val sM = (startParts.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (startParts.getOrNull(1)?.toIntOrNull() ?: 0)
+                val eM = (endParts.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (endParts.getOrNull(1)?.toIntOrNull() ?: 0)
+                (eM - sM).coerceAtLeast(0)
             } catch (e: Exception) {
                 0
             }
@@ -73,7 +87,9 @@ data class RoutineLog(
     val date: String = "", // yyyy-MM-dd
     val status: String = "done", // done / missed / skipped
     val note: String = "",
-    val completedAt: Timestamp? = null
+    val completedAt: Timestamp? = null,
+    val completedSubtasks: List<String> = emptyList(),
+    val focusDurationSeconds: Int = 0
 ) {
     // Computed UI helper properties
     val dateString: String get() = date

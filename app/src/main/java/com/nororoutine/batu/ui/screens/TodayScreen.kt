@@ -37,9 +37,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,18 +50,21 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.ViewCarousel
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -83,13 +88,20 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineStatus
+import com.nororoutine.batu.ui.components.FocusModeBottomSheet
 import com.nororoutine.batu.ui.components.PulsingDot
 import com.nororoutine.batu.ui.components.RoutineDetailBottomSheet
+import com.nororoutine.batu.ui.components.RoutineInfoMenuBottomSheet
+import com.nororoutine.batu.ui.components.StopwatchBottomSheet
+import com.nororoutine.batu.ui.components.StoryPeriod
+import com.nororoutine.batu.ui.components.StoryShareBottomSheet
+import com.nororoutine.batu.ui.components.SubtasksBottomSheet
 import com.nororoutine.batu.ui.components.TodayRoutinesBottomSheet
 import com.nororoutine.batu.ui.components.shake
 import com.nororoutine.batu.ui.components.springPress
@@ -102,7 +114,6 @@ import com.nororoutine.batu.ui.theme.MissedRed
 import com.nororoutine.batu.ui.theme.MutedWhite
 import com.nororoutine.batu.ui.theme.PureWhite
 import com.nororoutine.batu.ui.theme.SubtitleWhite
-import androidx.compose.ui.text.style.TextOverflow
 import com.nororoutine.batu.viewmodel.RutinUiState
 import com.nororoutine.batu.viewmodel.RutinViewModel
 import kotlinx.coroutines.delay
@@ -126,6 +137,7 @@ enum class MainViewState {
     ACTIVE
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
     viewModel: RutinViewModel,
@@ -279,6 +291,11 @@ fun TodayScreen(
 
     var selectedRoutineForSheet by remember { mutableStateOf<Routine?>(null) }
     var showTodayRoutinesSheet by remember { mutableStateOf(false) }
+    var infoMenuRoutine by remember { mutableStateOf<Routine?>(null) }
+    var focusModeRoutine by remember { mutableStateOf<Routine?>(null) }
+    var stopwatchRoutine by remember { mutableStateOf<Routine?>(null) }
+    var subtasksRoutine by remember { mutableStateOf<Routine?>(null) }
+    var showStoryShareSheet by remember { mutableStateOf(false) }
 
     val formattedDateFull = remember(today) {
         val day = today.dayOfMonth
@@ -317,7 +334,9 @@ fun TodayScreen(
                 onViewRoutinesClick = { showTodayRoutinesSheet = true },
                 onMarkDone = { routine -> viewModel.markRoutineDone(routine.id, today) },
                 onMarkEmpty = { routine -> viewModel.markRoutineEmpty(routine.id, today) },
-                onOpenNote = { routine -> selectedRoutineForSheet = routine }
+                onOpenNote = { routine -> selectedRoutineForSheet = routine },
+                onOpenInfo = { routine -> infoMenuRoutine = routine },
+                onOpenStoryShare = { showStoryShareSheet = true }
             )
         } else {
             PortraitTodayLayout(
@@ -346,6 +365,8 @@ fun TodayScreen(
                     }
                 },
                 onOpenNote = { routine -> selectedRoutineForSheet = routine },
+                onOpenInfo = { routine -> infoMenuRoutine = routine },
+                onOpenStoryShare = { showStoryShareSheet = true },
                 onNavigateToEdit = onNavigateToEdit
             )
         }
@@ -362,6 +383,10 @@ fun TodayScreen(
                 onOpenNote = { routine ->
                     selectedRoutineForSheet = routine
                 },
+                onOpenInfo = { routine ->
+                    infoMenuRoutine = routine
+                },
+                onOpenStoryShare = { showStoryShareSheet = true },
                 onNavigateToEdit = onNavigateToEdit,
                 onDismiss = { showTodayRoutinesSheet = false }
             )
@@ -385,6 +410,104 @@ fun TodayScreen(
                 onSaveNote = { note ->
                     viewModel.updateRoutineNote(routine.id, today, note)
                 }
+            )
+        }
+
+        // Routine Info Menu Bottom Sheet (Option 1: Odak Modu / Süre Tutma, Option 2: Alt Adımlar)
+        infoMenuRoutine?.let { routine ->
+            val todayDateKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${routine.id}"
+            val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
+            val currentLog = uiState.logs[todayDateKey]
+
+            RoutineInfoMenuBottomSheet(
+                routine = currentRoutine,
+                todayLog = currentLog,
+                onDismiss = { infoMenuRoutine = null },
+                onSelectFocusMode = {
+                    val r = currentRoutine
+                    infoMenuRoutine = null
+                    if (r.isRange) {
+                        focusModeRoutine = r
+                    } else {
+                        stopwatchRoutine = r
+                    }
+                },
+                onSelectSubtasks = {
+                    val r = currentRoutine
+                    infoMenuRoutine = null
+                    subtasksRoutine = r
+                }
+            )
+        }
+
+        // Focus Mode Bottom Sheet (Countdown timer for interval/range routines)
+        focusModeRoutine?.let { routine ->
+            val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
+            FocusModeBottomSheet(
+                routine = currentRoutine,
+                onDismiss = { focusModeRoutine = null },
+                onFinishAndComplete = { durationSeconds ->
+                    viewModel.saveFocusSession(
+                        routineId = currentRoutine.id,
+                        durationSeconds = durationSeconds,
+                        markRoutineComplete = true,
+                        date = today
+                    )
+                    focusModeRoutine = null
+                }
+            )
+        }
+
+        // Stopwatch Bottom Sheet (Elapsed timer for single-time routines)
+        stopwatchRoutine?.let { routine ->
+            val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
+            StopwatchBottomSheet(
+                routine = currentRoutine,
+                onDismiss = { stopwatchRoutine = null },
+                onFinishAndComplete = { durationSeconds ->
+                    viewModel.saveFocusSession(
+                        routineId = currentRoutine.id,
+                        durationSeconds = durationSeconds,
+                        markRoutineComplete = true,
+                        date = today
+                    )
+                    stopwatchRoutine = null
+                }
+            )
+        }
+
+        // Subtasks Bottom Sheet (Option 2: Alt adımlar)
+        subtasksRoutine?.let { routine ->
+            val todayDateKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${routine.id}"
+            val currentRoutine = uiState.routines.find { it.id == routine.id } ?: routine
+            val currentLog = uiState.logs[todayDateKey]
+
+            SubtasksBottomSheet(
+                routine = currentRoutine,
+                todayLog = currentLog,
+                onDismiss = { subtasksRoutine = null },
+                onAddSubtask = { text ->
+                    viewModel.addSubtask(currentRoutine.id, text)
+                },
+                onRemoveSubtask = { index ->
+                    viewModel.removeSubtask(currentRoutine.id, index)
+                },
+                onToggleSubtask = { text ->
+                    viewModel.toggleSubtaskDone(currentRoutine.id, text, today)
+                },
+                onMarkRoutineDone = {
+                    viewModel.markRoutineDone(currentRoutine.id, today)
+                }
+            )
+        }
+
+        // Story Share Bottom Sheet (9:16 Instagram / WhatsApp achievement story card)
+        if (showStoryShareSheet) {
+            StoryShareBottomSheet(
+                uiState = uiState,
+                initialPeriod = StoryPeriod.DAILY,
+                initialDate = today,
+                onDismiss = { showStoryShareSheet = false }
             )
         }
     }
@@ -422,6 +545,8 @@ fun PortraitTodayLayout(
     onMarkDone: (Routine) -> Unit,
     onMarkEmpty: (Routine) -> Unit,
     onOpenNote: (Routine) -> Unit,
+    onOpenInfo: (Routine) -> Unit,
+    onOpenStoryShare: () -> Unit,
     onNavigateToEdit: () -> Unit
 ) {
     val turkishLocale = remember { Locale("tr", "TR") }
@@ -436,7 +561,7 @@ fun PortraitTodayLayout(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(4.dp))
@@ -478,35 +603,53 @@ fun PortraitTodayLayout(
                     )
                 }
 
-                // Temp & Location
+                // Temp, Location & Story Share Button
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Rounded.Thermostat,
                         contentDescription = null,
                         tint = AccentTeal,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(13.dp)
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text = "${uiState.weatherInfo.temperature.toInt()}°C",
                         color = PureWhite,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Rounded.LocationOn,
-                        contentDescription = null,
-                        tint = AccentPurple,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = locationText.take(16),
+                        text = locationText.take(12),
                         color = SubtitleWhite,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         maxLines = 1
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    // Üst Bar Hikaye Paylaş Butonu (Çok belirgin gradyanlı)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF8B5CF6), Color(0xFF6366F1))))
+                            .clickable { onOpenStoryShare() }
+                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Share,
+                                contentDescription = "Başarı Hikayesi Paylaş",
+                                tint = PureWhite,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Paylaş",
+                                color = PureWhite,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -535,7 +678,9 @@ fun PortraitTodayLayout(
                     text = "Önceki: ${previousRoutine.name} (${previousRoutine.time})",
                     color = SubtitleWhite,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (prevIsDone) {
                     Spacer(modifier = Modifier.width(4.dp))
@@ -587,7 +732,9 @@ fun PortraitTodayLayout(
                         text = "Yaklaşan: ${approachingOrUpcomingRoutine.name} (${approachingOrUpcomingRoutine.time}) — Geri sayım: $upcomingCountdownText",
                         color = PureWhite,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -610,7 +757,9 @@ fun PortraitTodayLayout(
                         text = "Aktif Rutin: ${activeRoutine.name} (${activeRoutine.time})",
                         color = PureWhite,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -632,6 +781,7 @@ fun PortraitTodayLayout(
                 onMarkDone = onMarkDone,
                 onMarkEmpty = onMarkEmpty,
                 onOpenDetail = onOpenNote,
+                onOpenInfo = onOpenInfo,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -692,11 +842,12 @@ fun PortraitTodayLayout(
             val completionColor = getCompletionColor(todayPercent, totalCount)
             Box(
                 modifier = Modifier
+                    .weight(1f, fill = false)
                     .clip(RoundedCornerShape(999.dp))
                     .background(if (totalCount > 0) completionColor.copy(alpha = 0.22f) else Color(0xF2162035))
                     .border(1.dp, if (totalCount > 0) completionColor.copy(alpha = 0.75f) else GlassCardBorderSubtle, RoundedCornerShape(999.dp))
                     .clickable { onViewRoutinesClick() }
-                    .padding(horizontal = 16.dp, vertical = 9.dp)
+                    .padding(horizontal = 14.dp, vertical = 9.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -705,11 +856,39 @@ fun PortraitTodayLayout(
                         tint = if (totalCount > 0) completionColor else AccentTeal,
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (totalCount > 0) "Günün Rutinleri: $completedCount/$totalCount (%$todayPercent)" else "Günün Rutinleri (0)",
                         color = PureWhite,
                         fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Paylaşılabilir Hikaye Kartı Butonu
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0x338B5CF6))
+                    .border(1.dp, AccentPurple.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                    .clickable { onOpenStoryShare() }
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Share,
+                        contentDescription = "Hikaye Paylaş",
+                        tint = PureWhite,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Paylaş",
+                        color = PureWhite,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -739,7 +918,9 @@ fun LandscapeTodayLayout(
     onViewRoutinesClick: () -> Unit,
     onMarkDone: (Routine) -> Unit,
     onMarkEmpty: (Routine) -> Unit,
-    onOpenNote: (Routine) -> Unit
+    onOpenNote: (Routine) -> Unit,
+    onOpenInfo: (Routine) -> Unit,
+    onOpenStoryShare: () -> Unit
 ) {
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
     val todayRoutines = viewModel.getRoutinesForDay(today)
@@ -890,19 +1071,47 @@ fun LandscapeTodayLayout(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(AccentPurple.copy(alpha = 0.25f))
-                                .clickable { onViewRoutinesClick() }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Tümünü Gör",
-                                color = AccentTeal,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(AccentPurple.copy(alpha = 0.3f))
+                                    .clickable { onOpenStoryShare() }
+                                    .padding(horizontal = 9.dp, vertical = 4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Share,
+                                        contentDescription = "Hikaye Paylaş",
+                                        tint = PureWhite,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Paylaş",
+                                        color = PureWhite,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(AccentTeal.copy(alpha = 0.25f))
+                                    .clickable { onViewRoutinesClick() }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Tümünü Gör",
+                                    color = AccentTeal,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 
@@ -997,18 +1206,55 @@ fun LandscapeTodayLayout(
                                         }
                                     }
 
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0x22A78BFA))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Text(
-                                            text = r.category,
-                                            color = AccentPurple,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                                        if (r.isRange) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color(0x337CF4DE))
+                                                    .border(1.dp, AccentTeal.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "⏳ ${r.durationMinutes}dk",
+                                                    color = AccentTeal,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color(0x22A78BFA))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = r.category,
+                                                color = AccentPurple,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+
+                                        IconButton(
+                                            onClick = { onOpenInfo(r) },
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0x22FFFFFF))
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Info,
+                                                contentDescription = "Rutin Seçenekleri",
+                                                tint = if (r.isRange) AccentTeal else AccentPurple,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1038,6 +1284,7 @@ fun LandscapeTodayLayout(
                     onMarkDone = onMarkDone,
                     onMarkEmpty = onMarkEmpty,
                     onOpenDetail = onOpenNote,
+                    onOpenInfo = onOpenInfo,
                     modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -1078,6 +1325,7 @@ fun VerticalRoutineCardStack(
     onMarkDone: (Routine) -> Unit,
     onMarkEmpty: (Routine) -> Unit,
     onOpenDetail: (Routine) -> Unit,
+    onOpenInfo: (Routine) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
@@ -1249,7 +1497,8 @@ fun VerticalRoutineCardStack(
                         shakeTrigger = uiState.shakeTrigger,
                         onMarkDone = { onMarkDone(routine) },
                         onMarkEmpty = { onMarkEmpty(routine) },
-                        onOpenDetail = { onOpenDetail(routine) }
+                        onOpenDetail = { onOpenDetail(routine) },
+                        onOpenInfo = { onOpenInfo(routine) }
                     )
                 }
             }
@@ -1271,7 +1520,8 @@ fun CarouselRoutineCard(
     shakeTrigger: Int,
     onMarkDone: () -> Unit,
     onMarkEmpty: () -> Unit,
-    onOpenDetail: () -> Unit
+    onOpenDetail: () -> Unit,
+    onOpenInfo: () -> Unit
 ) {
     val solidActiveCenterBg = Color(0xF2162035) // Deep solid midnight blue glass
     val solidActiveCenterBorder = AccentPurple
@@ -1359,24 +1609,29 @@ fun CarouselRoutineCard(
 
     Box(
         modifier = Modifier
-            .width(if (isCenter) 330.dp else 290.dp)
+            .widthIn(max = if (isCenter) 345.dp else 295.dp)
+            .fillMaxWidth(if (isCenter) 0.96f else 0.85f)
             .clip(RoundedCornerShape(24.dp))
             .background(cardBg)
             .border(if (isCenter) 2.dp else 1.dp, cardBorder, RoundedCornerShape(24.dp))
             .shake(if (isShaking) shakeTrigger else 0)
-            .padding(18.dp)
+            .padding(horizontal = 14.dp, vertical = 16.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Header Row: Time + Category Pill
+            // Header Row: Time + Interval Tag + Category Pill + Information Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Left: Time & Interval Indicator (if isRange)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     Icon(
                         imageVector = Icons.Rounded.Schedule,
                         contentDescription = null,
@@ -1390,22 +1645,63 @@ fun CarouselRoutineCard(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+
+                    if (routine.isRange) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0x337CF4DE))
+                                .border(1.dp, AccentTeal.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⏳ ${routine.durationMinutes} dk Aralık",
+                                color = AccentTeal,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
-                // Category pill
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0x33A78BFA))
-                        .border(1.dp, Color(0x55A78BFA), RoundedCornerShape(999.dp))
-                        .padding(horizontal = 9.dp, vertical = 3.dp)
+                // Right: Category Pill + Information (İ) Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = routine.category,
-                        color = AccentPurple,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    // Category pill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0x33A78BFA))
+                            .border(1.dp, Color(0x55A78BFA), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = routine.category,
+                            color = AccentPurple,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Information (İ) Button (Odak Modu & Alt Adımlar)
+                    IconButton(
+                        onClick = onOpenInfo,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x22FFFFFF))
+                            .border(1.dp, GlassCardBorderSubtle, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = "Rutin Seçenekleri",
+                            tint = if (routine.isRange) AccentTeal else AccentPurple,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 
@@ -1441,14 +1737,14 @@ fun CarouselRoutineCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Rounded.Timer,
+                            imageVector = if (routine.isRange) Icons.Rounded.Schedule else Icons.Rounded.Timer,
                             contentDescription = null,
                             tint = AccentTeal,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = countdownText,
+                            text = if (routine.isRange) "Aralık: ${routine.durationMinutes} dk • $countdownText" else countdownText,
                             color = PureWhite,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
@@ -1461,7 +1757,7 @@ fun CarouselRoutineCard(
                 // Action Buttons Row: Tamamlandı & Boş Geç & Not
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isDone = status == RoutineStatus.DONE
@@ -1474,57 +1770,75 @@ fun CarouselRoutineCard(
                             .height(44.dp)
                             .springPress { onMarkDone() },
                         shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isDone) DoneGreen else Color(0x3310B981),
                             contentColor = if (isDone) Color(0xFF0F172A) else DoneGreen
                         ),
                         border = androidx.compose.foundation.BorderStroke(1.dp, DoneGreen)
                     ) {
-                        Icon(
-                            imageVector = if (isDone) Icons.Rounded.CheckCircle else Icons.Rounded.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isDone) "Tamamlandı" else "Tamamla",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isDone) Icons.Rounded.CheckCircle else Icons.Rounded.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (isDone) "Tamamlandı" else "Tamamla",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.5.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     // "Boş Geç" Button
                     OutlinedButton(
                         onClick = onMarkEmpty,
                         modifier = Modifier
-                            .weight(1.1f)
+                            .weight(1.0f)
                             .height(44.dp)
                             .springPress { onMarkEmpty() },
                         shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = Color(0x1AFFFFFF),
                             contentColor = SubtitleWhite
                         ),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF))
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Boş Geç",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.SkipNext,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Boş Geç",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     // Not Button
                     IconButton(
                         onClick = onOpenDetail,
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color(0x22FFFFFF))
                             .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(12.dp))
@@ -1533,7 +1847,7 @@ fun CarouselRoutineCard(
                             imageVector = Icons.Rounded.EditNote,
                             contentDescription = "Not Ekle / Oku",
                             tint = AccentTeal,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }

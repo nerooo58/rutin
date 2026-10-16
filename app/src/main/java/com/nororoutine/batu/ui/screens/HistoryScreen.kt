@@ -50,8 +50,10 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -77,6 +79,8 @@ import androidx.compose.ui.unit.sp
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineStatus
 import com.nororoutine.batu.model.UserStats
+import com.nororoutine.batu.ui.components.StoryPeriod
+import com.nororoutine.batu.ui.components.StoryShareBottomSheet
 import com.nororoutine.batu.ui.illustrations.RoutineIllustration
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
@@ -128,6 +132,7 @@ fun getCompletionColor(percent: Int, total: Int): Color {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     viewModel: RutinViewModel,
@@ -140,6 +145,7 @@ fun HistoryScreen(
     var currentYearAnchor by remember { mutableIntStateOf(LocalDate.now().year) }
     var selectedDayForDetail by remember { mutableStateOf<LocalDate?>(null) }
     var selectedMonthDetail by remember { mutableStateOf<Int?>(null) }
+    var showStoryShareSheet by remember { mutableStateOf(false) }
 
     val turkishLocale = remember { Locale("tr", "TR") }
 
@@ -153,19 +159,53 @@ fun HistoryScreen(
         ) {
             // Header
             item {
-                Text(
-                    text = "Geçmiş",
-                    color = PureWhite,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.5).sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Rutin tamamlama geçmişinizi analiz edin",
-                    color = MutedWhite,
-                    fontSize = 13.sp
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Geçmiş",
+                            color = PureWhite,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.5).sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Rutin tamamlama geçmişinizi analiz edin",
+                            color = MutedWhite,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    // Hikaye Paylaş Butonu (Haftalık, Aylık veya Yıllık Hikaye Kartı)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0x338B5CF6))
+                            .border(1.dp, AccentPurple.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                            .clickable { showStoryShareSheet = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.Share,
+                                contentDescription = "Hikaye Paylaş",
+                                tint = PureWhite,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Hikaye",
+                                color = PureWhite,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -387,6 +427,25 @@ fun HistoryScreen(
                     }
                 }
             }
+        }
+
+        if (showStoryShareSheet) {
+            val period = when (viewMode) {
+                HistoryViewMode.WEEK -> StoryPeriod.WEEKLY
+                HistoryViewMode.MONTH -> StoryPeriod.MONTHLY
+                HistoryViewMode.YEAR -> StoryPeriod.YEARLY
+            }
+            val anchorDate = when (viewMode) {
+                HistoryViewMode.WEEK -> currentWeekAnchor
+                HistoryViewMode.MONTH -> currentMonthAnchor.atDay(1)
+                HistoryViewMode.YEAR -> LocalDate.of(currentYearAnchor, 1, 1)
+            }
+            StoryShareBottomSheet(
+                uiState = uiState,
+                initialPeriod = period,
+                initialDate = anchorDate,
+                onDismiss = { showStoryShareSheet = false }
+            )
         }
     }
 }
@@ -1539,7 +1598,9 @@ private fun InlineRoutineItem(
                                 text = if (isDone) "Tamamlandı" else "Boş",
                                 color = if (isDone) DoneGreen else SubtitleWhite,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -1557,7 +1618,9 @@ private fun InlineRoutineItem(
                             text = if (isDone) "Tamamlandı" else "Boş",
                             color = if (isDone) DoneGreen else SubtitleWhite,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }

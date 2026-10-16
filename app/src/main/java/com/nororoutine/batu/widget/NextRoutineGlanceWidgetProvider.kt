@@ -115,7 +115,7 @@ class NextRoutineGlanceWidgetProvider : AppWidgetProvider() {
 
             if (isDone) {
                 views.setInt(R.id.widget_glance_btn_done, "setBackgroundResource", R.drawable.widget_btn_empty_bg)
-                views.setTextViewText(R.id.widget_glance_btn_text, "Tamamlandı (Geri Al)")
+                views.setTextViewText(R.id.widget_glance_btn_text, "Tamamlandı ✓")
                 views.setTextColor(R.id.widget_glance_btn_text, Color.parseColor("#4ADE80"))
             } else {
                 views.setInt(R.id.widget_glance_btn_done, "setBackgroundResource", R.drawable.widget_btn_done_bg)

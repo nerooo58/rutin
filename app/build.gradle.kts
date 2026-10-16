@@ -8,6 +8,10 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+base {
+  archivesName.set("rutin")
+}
+
 android {
   namespace = "com.nororoutine.batu"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

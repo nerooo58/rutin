@@ -24,8 +24,10 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,6 +68,8 @@ fun TodayRoutinesBottomSheet(
     getStatus: (Routine) -> RoutineStatus,
     onToggleStatus: (Routine) -> Unit,
     onOpenNote: (Routine) -> Unit,
+    onOpenInfo: (Routine) -> Unit = {},
+    onOpenStoryShare: () -> Unit = {},
     onNavigateToEdit: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -114,22 +118,47 @@ fun TodayRoutinesBottomSheet(
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                        onDismiss()
-                        onNavigateToEdit()
-                    },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x22FFFFFF))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "Rutin Ekle",
-                        tint = PureWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // Story Paylaş Butonu
+                    IconButton(
+                        onClick = {
+                            onDismiss()
+                            onOpenStoryShare()
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x338B5CF6))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Share,
+                            contentDescription = "Günün Hikayesini Paylaş",
+                            tint = PureWhite,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Rutin Ekle Butonu
+                    IconButton(
+                        onClick = {
+                            onDismiss()
+                            onNavigateToEdit()
+                        },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x22FFFFFF))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "Rutin Ekle",
+                            tint = PureWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -159,8 +188,37 @@ fun TodayRoutinesBottomSheet(
                             routine = routine,
                             status = status,
                             onToggleStatus = { onToggleStatus(routine) },
-                            onOpenNote = { onOpenNote(routine) }
+                            onOpenNote = { onOpenNote(routine) },
+                            onOpenInfo = { onOpenInfo(routine) }
                         )
+                    }
+
+                    // Alt Kısımda Çok Belirgin Hikaye Paylaş Butonu
+                    item {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onOpenStoryShare()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentPurple)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Share,
+                                contentDescription = null,
+                                tint = PureWhite,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Günün Başarı Hikayesini Paylaş (Story)",
+                                color = PureWhite,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
@@ -173,7 +231,8 @@ private fun TodayRoutineSheetItem(
     routine: Routine,
     status: RoutineStatus,
     onToggleStatus: () -> Unit,
-    onOpenNote: () -> Unit
+    onOpenNote: () -> Unit,
+    onOpenInfo: () -> Unit
 ) {
     val itemBg by animateColorAsState(
         targetValue = when (status) {
@@ -244,22 +303,49 @@ private fun TodayRoutineSheetItem(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "• ${routine.category}",
                     color = MutedWhite,
                     fontSize = 11.sp
                 )
+                if (routine.isRange) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "• ⏳ ${routine.durationMinutes} dk",
+                        color = AccentTeal,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Information (İ) Button (Odak Modu & Alt Adımlar)
+        IconButton(
+            onClick = onOpenInfo,
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(Color(0x22FFFFFF))
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Info,
+                contentDescription = "Rutin Seçenekleri",
+                tint = if (routine.isRange) AccentTeal else AccentPurple,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
 
         // Note button
         IconButton(
             onClick = onOpenNote,
             modifier = Modifier
-                .size(36.dp)
+                .size(34.dp)
                 .clip(CircleShape)
                 .background(Color(0x22FFFFFF))
         ) {
@@ -267,17 +353,17 @@ private fun TodayRoutineSheetItem(
                 imageVector = Icons.Rounded.EditNote,
                 contentDescription = "Not Ekle / Oku",
                 tint = AccentTeal,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
 
         // Mark Done Toggle Button
         IconButton(
             onClick = onToggleStatus,
             modifier = Modifier
-                .size(36.dp)
+                .size(34.dp)
                 .clip(CircleShape)
                 .background(
                     if (status == RoutineStatus.DONE) DoneGreen else Color(0x22FFFFFF)
@@ -287,7 +373,7 @@ private fun TodayRoutineSheetItem(
                 imageVector = if (status == RoutineStatus.DONE) Icons.Rounded.Check else Icons.Rounded.RadioButtonUnchecked,
                 contentDescription = "Durum Değiştir",
                 tint = if (status == RoutineStatus.DONE) Color(0xFF0F172A) else PureWhite,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
         }
     }

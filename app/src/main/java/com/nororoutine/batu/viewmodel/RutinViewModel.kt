@@ -494,6 +494,90 @@ class RutinViewModel(
         recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
     }
 
+    fun addSubtask(routineId: String, subtaskText: String) {
+        val trimmed = subtaskText.trim()
+        if (trimmed.isBlank()) return
+        val routine = _uiState.value.routines.find { it.id == routineId } ?: return
+        if (routine.subtasks.contains(trimmed)) return
+
+        val updatedRoutine = routine.copy(subtasks = routine.subtasks + trimmed)
+        val updatedList = _uiState.value.routines.map { if (it.id == routineId) updatedRoutine else it }
+        _uiState.update { it.copy(routines = updatedList) }
+        repository.saveRoutine(updatedRoutine)
+    }
+
+    fun removeSubtask(routineId: String, subtaskIndex: Int) {
+        val routine = _uiState.value.routines.find { it.id == routineId } ?: return
+        if (subtaskIndex !in routine.subtasks.indices) return
+
+        val updatedSubtasks = routine.subtasks.toMutableList().apply { removeAt(subtaskIndex) }
+        val updatedRoutine = routine.copy(subtasks = updatedSubtasks)
+        val updatedList = _uiState.value.routines.map { if (it.id == routineId) updatedRoutine else it }
+        _uiState.update { it.copy(routines = updatedList) }
+        repository.saveRoutine(updatedRoutine)
+    }
+
+    fun toggleSubtaskDone(routineId: String, subtaskText: String, date: LocalDate = LocalDate.now()) {
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val key = "${dateString}_${routineId}"
+        val currentLog = _uiState.value.logs[key] ?: RoutineLog(
+            id = key,
+            routineId = routineId,
+            date = dateString,
+            status = "empty",
+            completedAt = null
+        )
+
+        val completedSet = currentLog.completedSubtasks.toMutableSet()
+        if (completedSet.contains(subtaskText)) {
+            completedSet.remove(subtaskText)
+        } else {
+            completedSet.add(subtaskText)
+        }
+
+        val updatedLog = currentLog.copy(
+            completedSubtasks = completedSet.toList()
+        )
+        val updatedLogs = _uiState.value.logs + (key to updatedLog)
+        _uiState.update { it.copy(logs = updatedLogs) }
+        repository.saveLog(updatedLog)
+    }
+
+    fun saveFocusSession(routineId: String, durationSeconds: Int, markRoutineComplete: Boolean, date: LocalDate = LocalDate.now()) {
+        val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val key = "${dateString}_${routineId}"
+        val currentLog = _uiState.value.logs[key] ?: RoutineLog(
+            id = key,
+            routineId = routineId,
+            date = dateString,
+            status = if (markRoutineComplete) "done" else "empty",
+            completedAt = if (markRoutineComplete) Timestamp.now() else null
+        )
+
+        val newTotalDuration = currentLog.focusDurationSeconds + durationSeconds
+        val updatedLog = currentLog.copy(
+            status = if (markRoutineComplete) "done" else currentLog.status,
+            completedAt = if (markRoutineComplete) (currentLog.completedAt ?: Timestamp.now()) else currentLog.completedAt,
+            focusDurationSeconds = newTotalDuration
+        )
+        val updatedLogs = _uiState.value.logs + (key to updatedLog)
+        _uiState.update { it.copy(logs = updatedLogs) }
+        repository.saveLog(updatedLog)
+        recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
+
+        if (date == LocalDate.now()) {
+            try {
+                WidgetDataManager.updateWidgetCache(
+                    context = NoroRoutineApp.instance,
+                    routines = _uiState.value.routines,
+                    logs = updatedLogs
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("RutinViewModel", "Error updating widget cache on focus session", e)
+            }
+        }
+    }
+
     fun setSelectedHistoryDate(date: LocalDate) {
         _uiState.update { it.copy(selectedHistoryDate = date) }
     }

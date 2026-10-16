@@ -128,7 +128,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
-            android:text="Tamamlandı Olarak İşaretle"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:singleLine="true"
+            android:text="Tamamla"
             android:textColor="@color/widget_bg_dark"
             android:textSize="12sp"
             android:textStyle="bold" />
