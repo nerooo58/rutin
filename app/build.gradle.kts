@@ -17,11 +17,11 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.nororoutine.batu"
+    applicationId = "com.werostudios.routine"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.2.0"
+    versionCode = 3
+    versionName = "1.5.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

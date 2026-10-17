@@ -129,45 +129,50 @@ object ScreenTimeManager {
 
             var colorIdx = 0
 
+            val timeByPkg = mutableMapOf<String, Long>()
             stats?.forEach { stat ->
                 val time = stat.totalTimeInForeground
-                if (time > 60_000L) { // En az 1 dakika
+                if (time > 60_000L) {
                     val pkg = stat.packageName
-                    // Skip system launcher or background daemons if possible
-                    val isSystem = try {
-                        val appInfo = packageManager.getApplicationInfo(pkg, 0)
-                        (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
-                    } catch (e: Exception) {
-                        false
-                    }
+                    timeByPkg[pkg] = (timeByPkg[pkg] ?: 0L) + time
+                }
+            }
 
-                    val appName = try {
-                        val info = packageManager.getApplicationInfo(pkg, 0)
-                        packageManager.getApplicationLabel(info).toString()
-                    } catch (e: Exception) {
-                        pkg.substringAfterLast('.')
-                    }
+            timeByPkg.forEach { (pkg, time) ->
+                // Skip system launcher or background daemons if possible
+                val isSystem = try {
+                    val appInfo = packageManager.getApplicationInfo(pkg, 0)
+                    (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
+                } catch (e: Exception) {
+                    false
+                }
 
-                    if (!isSystem || pkg.contains("chrome") || pkg.contains("youtube") || pkg.contains("launcher")) {
-                        val durationMinutes = time / 60_000L
-                        totalMillis += time
-                        val assignedColor = colorPalette[colorIdx % colorPalette.size]
-                        colorIdx++
+                val appName = try {
+                    val info = packageManager.getApplicationInfo(pkg, 0)
+                    packageManager.getApplicationLabel(info).toString()
+                } catch (e: Exception) {
+                    pkg.substringAfterLast('.')
+                }
 
-                        val category = detectCategory(pkg, appName)
+                if (!isSystem || pkg.contains("chrome") || pkg.contains("youtube") || pkg.contains("launcher")) {
+                    val durationMinutes = time / 60_000L
+                    totalMillis += time
+                    val assignedColor = colorPalette[colorIdx % colorPalette.size]
+                    colorIdx++
 
-                        filteredList.add(
-                            AppUsageInfo(
-                                packageName = pkg,
-                                appName = appName,
-                                durationMinutes = durationMinutes,
-                                percentageOfTotal = 0, // calculate later
-                                color = assignedColor,
-                                sessionCount = ((durationMinutes / 12) + 1).toInt(),
-                                category = category
-                            )
+                    val category = detectCategory(pkg, appName)
+
+                    filteredList.add(
+                        AppUsageInfo(
+                            packageName = pkg,
+                            appName = appName,
+                            durationMinutes = durationMinutes,
+                            percentageOfTotal = 0, // calculate later
+                            color = assignedColor,
+                            sessionCount = ((durationMinutes / 12) + 1).toInt(),
+                            category = category
                         )
-                    }
+                    )
                 }
             }
 

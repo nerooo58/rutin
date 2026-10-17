@@ -361,6 +361,29 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // Version info footer
+            item {
+                Spacer(modifier = Modifier.height(20.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Rutin v${com.nororoutine.batu.BuildConfig.VERSION_NAME}",
+                        color = SubtitleWhite.copy(alpha = 0.6f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "Wero Studios • Noro AI Ready",
+                        color = SubtitleWhite.copy(alpha = 0.35f),
+                        fontSize = 11.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
 
         // Reset Data Dialog

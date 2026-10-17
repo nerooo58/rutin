@@ -16,5 +16,8 @@ service cloud.firestore {
     match /stats/{userId} {
       allow read, write: if true;
     }
+    match /noro_context/{docId} {
+      allow read, write: if true;
+    }
   }
 }

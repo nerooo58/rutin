@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -458,12 +459,12 @@ fun ScreenTimeDetailSheet(
                     }
                 }
 
-                items(summary.allApps, key = { it.packageName }) { app ->
+                itemsIndexed(summary.allApps, key = { index, app -> "${app.packageName}_$index" }) { _, app ->
                     AppUsageRow(app = app, maxMinutes = summary.totalMinutes.coerceAtLeast(1L))
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(48.dp))
                 }
             }
         }
@@ -475,10 +476,13 @@ private fun AppUsageRow(
     app: AppUsageInfo,
     maxMinutes: Long
 ) {
-    val progress = (app.durationMinutes.toFloat() / maxMinutes.toFloat()).coerceIn(0.02f, 1f)
+    val safeMax = if (maxMinutes > 0L) maxMinutes.toFloat() else 1f
+    val rawProgress = (app.durationMinutes.toFloat() / safeMax)
+    val safeProgress = if (rawProgress.isNaN() || rawProgress.isInfinite()) 0.05f else rawProgress.coerceIn(0.01f, 1f)
+
     val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = tween(durationMillis = 600),
+        targetValue = safeProgress,
+        animationSpec = tween(durationMillis = 400),
         label = "appProgress"
     )
 
@@ -553,9 +557,10 @@ private fun AppUsageRow(
                     .clip(RoundedCornerShape(999.dp))
                     .background(Color(0x22FFFFFF))
             ) {
+                val clampedBarFraction = if (animatedProgress.isNaN() || animatedProgress.isInfinite()) 0.05f else animatedProgress.coerceIn(0.01f, 1f)
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(animatedProgress)
+                        .fillMaxWidth(clampedBarFraction)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(999.dp))
                         .background(

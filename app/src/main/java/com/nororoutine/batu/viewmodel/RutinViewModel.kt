@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nororoutine.batu.NoroRoutineApp
 import com.nororoutine.batu.data.FirestoreRepository
+import com.nororoutine.batu.data.NoroContextSync
 import com.nororoutine.batu.model.DAY_INT_TO_STRING
 import com.nororoutine.batu.model.Routine
 import com.nororoutine.batu.model.RoutineLog
@@ -191,6 +192,18 @@ class RutinViewModel(
         val newStats = calculateStats(routines, logs)
         _uiState.update { it.copy(stats = newStats) }
         repository.saveStats(newStats)
+
+        // Automatically publish AI-ready routine & focus context for Noro AI Assistant
+        try {
+            NoroContextSync.sync(
+                routines = routines,
+                logs = logs,
+                stats = newStats,
+                today = LocalDate.now()
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("RutinViewModel", "Error syncing Noro AI context", e)
+        }
     }
 
     fun selectTab(tabIndex: Int) {

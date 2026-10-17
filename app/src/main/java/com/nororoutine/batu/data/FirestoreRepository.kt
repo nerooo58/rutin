@@ -28,19 +28,20 @@ class FirestoreRepository {
         const val DEFAULT_USER_ID = "user_default"
     }
 
-    private val db: FirebaseFirestore? by lazy {
-        try {
-            if (FirebaseApp.getApps(com.nororoutine.batu.NoroRoutineApp.instance).isNotEmpty()) {
-                FirebaseFirestore.getInstance()
-            } else {
-                Log.w(TAG, "FirebaseApp is not initialized; Firestore unavailable")
+    private val db: FirebaseFirestore?
+        get() {
+            return try {
+                if (FirebaseApp.getApps(com.nororoutine.batu.NoroRoutineApp.instance).isNotEmpty()) {
+                    FirebaseFirestore.getInstance()
+                } else {
+                    Log.w(TAG, "FirebaseApp is not initialized yet; Firestore temporarily unavailable")
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get FirebaseFirestore instance", e)
                 null
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to get FirebaseFirestore instance", e)
-            null
         }
-    }
 
     /**
      * Real-time snapshot listener for routines collection.
