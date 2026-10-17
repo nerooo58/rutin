@@ -52,13 +52,16 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.FastRewind
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.animation.Crossfade
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Thermostat
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.ViewCarousel
@@ -71,6 +74,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -98,6 +102,9 @@ import com.nororoutine.batu.ui.components.FocusModeBottomSheet
 import com.nororoutine.batu.ui.components.PulsingDot
 import com.nororoutine.batu.ui.components.RoutineDetailBottomSheet
 import com.nororoutine.batu.ui.components.RoutineInfoMenuBottomSheet
+import com.nororoutine.batu.ui.components.MusicPlayerCard
+import com.nororoutine.batu.ui.components.ScreenTimeDetailSheet
+import com.nororoutine.batu.ui.components.ScreenTimeSummaryCard
 import com.nororoutine.batu.ui.components.StopwatchBottomSheet
 import com.nororoutine.batu.ui.components.StoryPeriod
 import com.nororoutine.batu.ui.components.StoryShareBottomSheet
@@ -295,6 +302,8 @@ fun TodayScreen(
     var fullScreenFocusRoutine by remember { mutableStateOf<Routine?>(null) }
     var subtasksRoutine by remember { mutableStateOf<Routine?>(null) }
     var showStoryShareSheet by remember { mutableStateOf(false) }
+    var showScreenTimeDetailSheet by remember { mutableStateOf(false) }
+    var showMusicSheet by remember { mutableStateOf(false) }
 
     val formattedDateFull = remember(today) {
         val day = today.dayOfMonth
@@ -335,7 +344,8 @@ fun TodayScreen(
                 onMarkEmpty = { routine -> viewModel.markRoutineEmpty(routine.id, today) },
                 onOpenNote = { routine -> selectedRoutineForSheet = routine },
                 onOpenInfo = { routine -> infoMenuRoutine = routine },
-                onOpenStoryShare = { showStoryShareSheet = true }
+                onOpenStoryShare = { showStoryShareSheet = true },
+                onOpenScreenTimeDetail = { showScreenTimeDetailSheet = true }
             )
         } else {
             PortraitTodayLayout(
@@ -366,6 +376,8 @@ fun TodayScreen(
                 onOpenNote = { routine -> selectedRoutineForSheet = routine },
                 onOpenInfo = { routine -> infoMenuRoutine = routine },
                 onOpenStoryShare = { showStoryShareSheet = true },
+                onOpenScreenTime = { showScreenTimeDetailSheet = true },
+                onOpenMusic = { showMusicSheet = true },
                 onNavigateToEdit = onNavigateToEdit
             )
         }
@@ -481,6 +493,27 @@ fun TodayScreen(
                 onDismiss = { showStoryShareSheet = false }
             )
         }
+
+        // Screen Time Detail Sheet
+        if (showScreenTimeDetailSheet) {
+            ScreenTimeDetailSheet(
+                onDismissRequest = { showScreenTimeDetailSheet = false }
+            )
+        }
+
+        // Music & Focus Audio Sheet (for phone mode)
+        if (showMusicSheet) {
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { showMusicSheet = false },
+                containerColor = Color(0xFF0F172A),
+                scrimColor = Color.Black.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            ) {
+                Box(modifier = Modifier.padding(16.dp)) {
+                    MusicPlayerCard(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
     }
 }
 
@@ -518,6 +551,8 @@ fun PortraitTodayLayout(
     onOpenNote: (Routine) -> Unit,
     onOpenInfo: (Routine) -> Unit,
     onOpenStoryShare: () -> Unit,
+    onOpenScreenTime: () -> Unit = {},
+    onOpenMusic: () -> Unit = {},
     onNavigateToEdit: () -> Unit
 ) {
     val turkishLocale = remember { Locale("tr", "TR") }
@@ -839,6 +874,44 @@ fun PortraitTodayLayout(
                 }
             }
 
+            // Ekran Süresi Butonu
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0x3306B6D4))
+                    .border(1.dp, AccentTeal.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                    .clickable { onOpenScreenTime() }
+                    .padding(horizontal = 9.dp, vertical = 9.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Smartphone,
+                        contentDescription = "Ekran Süresi",
+                        tint = PureWhite,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // Müzik / Odak Sesi Butonu
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0x3310B981))
+                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                    .clickable { onOpenMusic() }
+                    .padding(horizontal = 9.dp, vertical = 9.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = "Müzik",
+                        tint = PureWhite,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
             // Paylaşılabilir Hikaye Kartı Butonu
             Box(
                 modifier = Modifier
@@ -891,7 +964,8 @@ fun LandscapeTodayLayout(
     onMarkEmpty: (Routine) -> Unit,
     onOpenNote: (Routine) -> Unit,
     onOpenInfo: (Routine) -> Unit,
-    onOpenStoryShare: () -> Unit
+    onOpenStoryShare: () -> Unit,
+    onOpenScreenTimeDetail: () -> Unit
 ) {
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
     val todayRoutines = viewModel.getRoutinesForDay(today)
@@ -904,12 +978,12 @@ fun LandscapeTodayLayout(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left Side: Time, Date, Weather Card & Rich Routine Summary / Checklist
+        // Left Side: Time, Date, Weather Card, Music Player & Screen Time Card
         Column(
             modifier = Modifier
                 .weight(1.1f)
                 .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -920,7 +994,7 @@ fun LandscapeTodayLayout(
                     Text(
                         text = formattedTime,
                         color = PureWhite,
-                        fontSize = 48.sp,
+                        fontSize = 42.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = (-1).sp
                     )
@@ -928,7 +1002,7 @@ fun LandscapeTodayLayout(
                     Text(
                         text = dateText,
                         color = SubtitleWhite,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -940,7 +1014,7 @@ fun LandscapeTodayLayout(
                             .clip(RoundedCornerShape(999.dp))
                             .background(Color(0x33F59E0B))
                             .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Text(
                             text = "🔥 $currentStreak Gün Seri",
@@ -952,16 +1026,14 @@ fun LandscapeTodayLayout(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
             // Weather Card with Location
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xF2131D31))
-                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(18.dp))
-                    .padding(14.dp)
+                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(16.dp))
+                    .padding(12.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -974,29 +1046,29 @@ fun LandscapeTodayLayout(
                                 imageVector = Icons.Rounded.Thermostat,
                                 contentDescription = null,
                                 tint = AccentTeal,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "${uiState.weatherInfo.temperature.toInt()}°C • ${uiState.weatherInfo.condition.label}",
                                 color = PureWhite,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Rounded.LocationOn,
                                 contentDescription = null,
                                 tint = AccentPurple,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = locationText,
                                 color = SubtitleWhite,
-                                fontSize = 12.sp
+                                fontSize = 11.sp
                             )
                         }
                     }
@@ -1006,7 +1078,7 @@ fun LandscapeTodayLayout(
                         Text(
                             text = if (totalTodayRoutines > 0) "%$todayPercent" else "-",
                             color = completionColor,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
@@ -1018,7 +1090,16 @@ fun LandscapeTodayLayout(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // Tablet Music Player & Focus Soundscape Card
+            MusicPlayerCard(
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Tablet Screen Time Card (Tap to open detailed stats)
+            ScreenTimeSummaryCard(
+                onOpenDetail = { onOpenScreenTimeDetail() },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // Today's Routine List Preview (Quick Checklist for Tablet)
             Box(
