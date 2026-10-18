@@ -182,7 +182,7 @@ fun YksCoachScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // --- 4 SUB-TABS: Koç Sohbeti | Deneme Analizleri | Grafik & Mat Lab | Soru Çöz ---
+            // --- 3 SUB-TABS: Sohbet | Deneme | Çalışma ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -194,9 +194,8 @@ fun YksCoachScreen(
             ) {
                 val tabs = listOf(
                     Triple(0, "Sohbet", Icons.Rounded.Psychology),
-                    Triple(1, "Denemeler", Icons.Rounded.TrendingUp),
-                    Triple(2, "Grafik & Mat", Icons.Rounded.ShowChart),
-                    Triple(3, "Soru Çöz", Icons.Rounded.Quiz)
+                    Triple(1, "Deneme", Icons.Rounded.TrendingUp),
+                    Triple(2, "Çalışma", Icons.Rounded.Quiz)
                 )
 
                 tabs.forEach { (index, title, icon) ->
@@ -216,7 +215,7 @@ fun YksCoachScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .background(tabBg)
                             .clickable { coachViewModel.setSubTab(index) }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -224,13 +223,13 @@ fun YksCoachScreen(
                                 imageVector = icon,
                                 contentDescription = title,
                                 tint = contentColor,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = title,
                                 color = contentColor,
-                                fontSize = 11.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         }

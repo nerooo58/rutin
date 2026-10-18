@@ -934,7 +934,7 @@ fun PortraitTodayLayout(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "YKS Koç",
+                        text = "Ders",
                         color = PureWhite,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold

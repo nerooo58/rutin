@@ -54,7 +54,7 @@ data class TabItem(
 val RUTIN_TABS = listOf(
     TabItem("Bugün", Icons.Rounded.Schedule),
     TabItem("Düzenle", Icons.Rounded.Edit),
-    TabItem("YKS 2028", Icons.Rounded.School),
+    TabItem("Ders", Icons.Rounded.School),
     TabItem("Geçmiş", Icons.Rounded.CalendarMonth),
     TabItem("Ayarlar", Icons.Rounded.Settings)
 )
