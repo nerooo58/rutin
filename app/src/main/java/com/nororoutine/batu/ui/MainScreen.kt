@@ -126,7 +126,10 @@ fun MainScreen(
                     )
                 }
             ) { innerPadding ->
-                // Tab switching: smooth spring slide transition on x-axis
+                androidx.activity.compose.BackHandler(enabled = uiState.currentTab != 0) {
+                    viewModel.selectTab(0)
+                }
+
                 AnimatedContent(
                     targetState = uiState.currentTab,
                     transitionSpec = {
@@ -161,17 +164,19 @@ fun MainScreen(
                         0 -> TodayScreen(
                             viewModel = viewModel,
                             uiState = uiState,
-                            onNavigateToEdit = { viewModel.selectTab(1) }
+                            onNavigateToEdit = { viewModel.selectTab(1) },
+                            onNavigateToYksCoach = { viewModel.selectTab(2) }
                         )
                         1 -> EditScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )
-                        2 -> HistoryScreen(
+                        2 -> com.nororoutine.batu.ui.screens.YksCoachScreen()
+                        3 -> HistoryScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )
-                        3 -> SettingsScreen(
+                        4 -> SettingsScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )

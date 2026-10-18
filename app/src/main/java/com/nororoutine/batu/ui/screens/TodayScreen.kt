@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Smartphone
@@ -150,6 +151,7 @@ fun TodayScreen(
     viewModel: RutinViewModel,
     uiState: RutinUiState,
     onNavigateToEdit: () -> Unit,
+    onNavigateToYksCoach: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -378,7 +380,8 @@ fun TodayScreen(
                 onOpenStoryShare = { showStoryShareSheet = true },
                 onOpenScreenTime = { showScreenTimeDetailSheet = true },
                 onOpenMusic = { showMusicSheet = true },
-                onNavigateToEdit = onNavigateToEdit
+                onNavigateToEdit = onNavigateToEdit,
+                onNavigateToYksCoach = onNavigateToYksCoach
             )
         }
 
@@ -553,7 +556,8 @@ fun PortraitTodayLayout(
     onOpenStoryShare: () -> Unit,
     onOpenScreenTime: () -> Unit = {},
     onOpenMusic: () -> Unit = {},
-    onNavigateToEdit: () -> Unit
+    onNavigateToEdit: () -> Unit,
+    onNavigateToYksCoach: () -> Unit = {}
 ) {
     val turkishLocale = remember { Locale("tr", "TR") }
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
@@ -908,6 +912,32 @@ fun PortraitTodayLayout(
                         contentDescription = "Müzik",
                         tint = PureWhite,
                         modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // 2028 YKS & Maarif Modeli Koç Butonu
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF6366F1), Color(0xFF06B6D4))))
+                    .border(1.dp, AccentTeal.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
+                    .clickable { onNavigateToYksCoach() }
+                    .padding(horizontal = 11.dp, vertical = 9.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.School,
+                        contentDescription = "YKS 2028 Koç",
+                        tint = PureWhite,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "YKS Koç",
+                        color = PureWhite,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
