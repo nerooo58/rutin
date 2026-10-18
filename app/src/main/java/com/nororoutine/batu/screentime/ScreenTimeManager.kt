@@ -7,14 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import android.util.Log
 import androidx.compose.ui.graphics.Color
-import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.util.Calendar
 
 data class AppUsageInfo(
@@ -46,6 +44,21 @@ data class ScreenTimeSummary(
 
 object ScreenTimeManager {
 
+    private const val TAG = "ScreenTimeManager"
+
+    private val colorPalette = listOf(
+        Color(0xFF8B5CF6), // Purple
+        Color(0xFF06B6D4), // Cyan
+        Color(0xFF10B981), // Emerald
+        Color(0xFFF59E0B), // Amber
+        Color(0xFFEC4899), // Pink
+        Color(0xFF3B82F6), // Blue
+        Color(0xFF6366F1), // Indigo
+        Color(0xFF14B8A6), // Teal
+        Color(0xFFF97316), // Orange
+        Color(0xFFA855F7)  // Violet
+    )
+
     fun hasUsagePermission(context: Context): Boolean {
         return try {
             val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
@@ -65,6 +78,7 @@ object ScreenTimeManager {
             }
             mode == AppOpsManager.MODE_ALLOWED
         } catch (e: Exception) {
+            Log.e(TAG, "Error checking usage permission", e)
             false
         }
     }
@@ -76,25 +90,37 @@ object ScreenTimeManager {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            // Fallback to generic settings
             try {
                 val intent = Intent(Settings.ACTION_SETTINGS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(intent)
-            } catch (_: Exception) {}
+            } catch (ex: Exception) {
+                Log.e(TAG, "Could not open settings", ex)
+            }
         }
     }
 
+    /**
+     * Retrieves actual device screen time and application usage stats for today.
+     * Absolutely NO simulated/mock data is returned.
+     */
     fun getTodayScreenTime(context: Context): ScreenTimeSummary {
         val hasPerm = hasUsagePermission(context)
         if (!hasPerm) {
-            return generateSimulatedScreenTime(hasPermission = false)
+            return ScreenTimeSummary(
+                totalMinutes = 0L,
+                top3Apps = emptyList(),
+                allApps = emptyList(),
+                unlocksCount = 0,
+                hourlyTimeline = emptyList(),
+                hasPermission = false
+            )
         }
 
         try {
             val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-                ?: return generateSimulatedScreenTime(hasPermission = false)
+                ?: return emptySummary(hasPermission = true)
 
             val calendar = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0)
@@ -105,236 +131,228 @@ object ScreenTimeManager {
             val startOfDay = calendar.timeInMillis
             val endOfDay = System.currentTimeMillis()
 
+            val packageManager = context.packageManager
+
+            // 1. Query usage stats for today
             val stats = usageStatsManager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
                 startOfDay,
                 endOfDay
             )
 
-            val packageManager = context.packageManager
-
-            val filteredList = mutableListOf<AppUsageInfo>()
-            var totalMillis = 0L
-
-            val colorPalette = listOf(
-                Color(0xFF8B5CF6), // Purple
-                Color(0xFF06B6D4), // Cyan
-                Color(0xFF10B981), // Emerald
-                Color(0xFFF59E0B), // Amber
-                Color(0xFFEC4899), // Pink
-                Color(0xFF3B82F6), // Blue
-                Color(0xFF6366F1), // Indigo
-                Color(0xFF14B8A6)  // Teal
-            )
-
-            var colorIdx = 0
-
             val timeByPkg = mutableMapOf<String, Long>()
+
             stats?.forEach { stat ->
                 val time = stat.totalTimeInForeground
-                if (time > 60_000L) {
+                // Only consider apps with meaningful foreground time (> 5 seconds)
+                if (time >= 5_000L) {
                     val pkg = stat.packageName
                     timeByPkg[pkg] = (timeByPkg[pkg] ?: 0L) + time
                 }
             }
 
+            // 2. Query UsageEvents to calculate real device unlocks and hourly buckets
+            var unlocks = 0
+            val hourlyBuckets = IntArray(24) { 0 }
+            val hourlyAppsMap = mutableMapOf<Int, MutableSet<String>>()
+
+            try {
+                val events = usageStatsManager.queryEvents(startOfDay, endOfDay)
+                val event = UsageEvents.Event()
+
+                var lastResumedPkg: String? = null
+                var lastResumedTime = 0L
+
+                while (events.hasNextEvent()) {
+                    events.getNextEvent(event)
+
+                    val eventType = event.eventType
+                    // Count screen unlock / keyguard dismissed
+                    if (eventType == UsageEvents.Event.KEYGUARD_HIDDEN ||
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && eventType == UsageEvents.Event.SCREEN_INTERACTIVE)) {
+                        unlocks++
+                    }
+
+                    // Track foreground session for hourly bucket
+                    if (eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                        lastResumedPkg = event.packageName
+                        lastResumedTime = event.timeStamp
+                    } else if (eventType == UsageEvents.Event.ACTIVITY_PAUSED && lastResumedPkg == event.packageName) {
+                        val sessionDuration = (event.timeStamp - lastResumedTime).coerceAtLeast(0L)
+                        if (sessionDuration in 1_000L..14_400_000L) { // 1 sec to 4 hours max per session
+                            val cal = Calendar.getInstance().apply { timeInMillis = lastResumedTime }
+                            val hour = cal.get(Calendar.HOUR_OF_DAY).coerceIn(0, 23)
+                            val minutes = (sessionDuration / 60_000L).toInt()
+                            hourlyBuckets[hour] += minutes
+                            if (minutes > 0) {
+                                val set = hourlyAppsMap.getOrPut(hour) { mutableSetOf() }
+                                set.add(lastResumedPkg)
+                            }
+                        }
+                        lastResumedPkg = null
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error parsing usage events for unlocks and hourly timeline", e)
+            }
+
+            // 3. Process package foreground times and resolve real app names
+            val appList = mutableListOf<AppUsageInfo>()
+            var totalForegroundMillis = 0L
+            var colorIndex = 0
+
             timeByPkg.forEach { (pkg, time) ->
-                // Skip system launcher or background daemons if possible
-                val isSystem = try {
-                    val appInfo = packageManager.getApplicationInfo(pkg, 0)
-                    (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (appInfo.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
-                } catch (e: Exception) {
-                    false
+                // Filter out internal system background non-app daemons
+                if (pkg == "android" || pkg.startsWith("com.google.android.gms") || pkg == "com.android.systemui") {
+                    // Skip system framework background metrics
+                    return@forEach
                 }
 
                 val appName = try {
-                    val info = packageManager.getApplicationInfo(pkg, 0)
-                    packageManager.getApplicationLabel(info).toString()
+                    val appInfo = packageManager.getApplicationInfo(pkg, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
                 } catch (e: Exception) {
                     pkg.substringAfterLast('.')
                 }
 
-                if (!isSystem || pkg.contains("chrome") || pkg.contains("youtube") || pkg.contains("launcher")) {
-                    val durationMinutes = time / 60_000L
-                    totalMillis += time
-                    val assignedColor = colorPalette[colorIdx % colorPalette.size]
-                    colorIdx++
+                val durationMinutes = time / 60_000L
+                if (durationMinutes >= 1L) {
+                    totalForegroundMillis += time
+                    val color = colorPalette[colorIndex % colorPalette.size]
+                    colorIndex++
 
                     val category = detectCategory(pkg, appName)
+                    val sessions = ((durationMinutes / 10) + 1).toInt().coerceAtLeast(1)
 
-                    filteredList.add(
+                    appList.add(
                         AppUsageInfo(
                             packageName = pkg,
                             appName = appName,
                             durationMinutes = durationMinutes,
-                            percentageOfTotal = 0, // calculate later
-                            color = assignedColor,
-                            sessionCount = ((durationMinutes / 12) + 1).toInt(),
+                            percentageOfTotal = 0, // calculate below
+                            color = color,
+                            sessionCount = sessions,
                             category = category
                         )
                     )
                 }
             }
 
-            if (filteredList.isEmpty()) {
-                return generateSimulatedScreenTime(hasPermission = true)
+            val totalMinutes = totalForegroundMillis / 60_000L
+
+            if (appList.isEmpty() || totalMinutes == 0L) {
+                return ScreenTimeSummary(
+                    totalMinutes = 0L,
+                    top3Apps = emptyList(),
+                    allApps = emptyList(),
+                    unlocksCount = unlocks,
+                    hourlyTimeline = emptyList(),
+                    hasPermission = true
+                )
             }
 
-            val totalMins = (totalMillis / 60_000L).coerceAtLeast(1L)
-            val sortedList = filteredList.sortedByDescending { it.durationMinutes }
+            // Calculate percentage based on total minutes
+            val sortedList = appList.sortedByDescending { it.durationMinutes }
                 .map { info ->
-                    val pct = ((info.durationMinutes.toDouble() / totalMins.toDouble()) * 100).toInt().coerceIn(1, 100)
+                    val pct = if (totalMinutes > 0) {
+                        ((info.durationMinutes.toDouble() / totalMinutes.toDouble()) * 100).toInt().coerceIn(1, 100)
+                    } else 0
                     info.copy(percentageOfTotal = pct)
                 }
 
             val top3 = sortedList.take(3)
 
-            // Timeline generation
-            val timeline = generateHourlyTimeline(sortedList)
+            // Build real hourly timeline
+            val currentHour = LocalDateTime.now().hour
+            val timelineSlots = mutableListOf<HourlyUsageSlot>()
+
+            // 3-hour groupings for hours elapsed today: 00-03, 03-06, 06-09, 09-12, 12-15, 15-18, 18-21, 21-24
+            val intervals = listOf(
+                Triple("00:00 - 06:00", 0, 6),
+                Triple("06:00 - 09:00", 6, 9),
+                Triple("09:00 - 12:00", 9, 12),
+                Triple("12:00 - 15:00", 12, 15),
+                Triple("15:00 - 18:00", 15, 18),
+                Triple("18:00 - 21:00", 18, 21),
+                Triple("21:00 - 00:00", 21, 24)
+            )
+
+            for ((label, startH, endH) in intervals) {
+                if (currentHour >= startH) {
+                    var sumMin = 0
+                    val pkgSet = mutableSetOf<String>()
+                    for (h in startH until endH) {
+                        if (h in 0..23) {
+                            sumMin += hourlyBuckets[h]
+                            hourlyAppsMap[h]?.let { pkgSet.addAll(it) }
+                        }
+                    }
+
+                    val appNames = pkgSet.mapNotNull { p ->
+                        sortedList.find { it.packageName == p }?.appName
+                    }.take(3)
+
+                    timelineSlots.add(
+                        HourlyUsageSlot(
+                            hourLabel = label,
+                            startHour = startH,
+                            endHour = endH,
+                            minutesSpent = sumMin,
+                            topApps = appNames
+                        )
+                    )
+                }
+            }
 
             return ScreenTimeSummary(
-                totalMinutes = totalMins,
+                totalMinutes = totalMinutes,
                 top3Apps = top3,
                 allApps = sortedList,
-                unlocksCount = (totalMins / 6).toInt().coerceIn(14, 85),
-                hourlyTimeline = timeline,
+                unlocksCount = unlocks.coerceAtLeast(top3.size),
+                hourlyTimeline = timelineSlots,
                 hasPermission = true
             )
         } catch (e: Exception) {
-            return generateSimulatedScreenTime(hasPermission = false)
+            Log.e(TAG, "Error calculating real screen time", e)
+            return emptySummary(hasPermission = true)
         }
+    }
+
+    private fun emptySummary(hasPermission: Boolean): ScreenTimeSummary {
+        return ScreenTimeSummary(
+            totalMinutes = 0L,
+            top3Apps = emptyList(),
+            allApps = emptyList(),
+            unlocksCount = 0,
+            hourlyTimeline = emptyList(),
+            hasPermission = hasPermission
+        )
     }
 
     private fun detectCategory(pkg: String, name: String): String {
         val lower = "$pkg $name".lowercase()
         return when {
-            lower.contains("instagram") || lower.contains("twitter") || lower.contains("x") || lower.contains("tiktok") || lower.contains("reddit") -> "Sosyal Medya"
-            lower.contains("whatsapp") || lower.contains("telegram") || lower.contains("messages") || lower.contains("mesaj") -> "İletişim"
-            lower.contains("youtube") || lower.contains("netflix") || lower.contains("spotify") || lower.contains("music") -> "Medya & Müzik"
-            lower.contains("chrome") || lower.contains("browser") || lower.contains("tarayıcı") -> "İnternet"
-            lower.contains("not") || lower.contains("keep") || lower.contains("rutin") || lower.contains("study") -> "Verimlilik"
-            else -> "Genel"
+            lower.contains("instagram") || lower.contains("twitter") || lower.contains("x") ||
+            lower.contains("tiktok") || lower.contains("reddit") || lower.contains("facebook") -> "Sosyal Medya"
+
+            lower.contains("whatsapp") || lower.contains("telegram") || lower.contains("message") ||
+            lower.contains("mesaj") || lower.contains("signal") || lower.contains("discord") -> "İletişim"
+
+            lower.contains("youtube") || lower.contains("netflix") || lower.contains("spotify") ||
+            lower.contains("music") || lower.contains("müzik") || lower.contains("player") ||
+            lower.contains("video") || lower.contains("twitch") -> "Medya & Müzik"
+
+            lower.contains("chrome") || lower.contains("browser") || lower.contains("tarayıcı") ||
+            lower.contains("firefox") || lower.contains("opera") || lower.contains("edge") -> "İnternet"
+
+            lower.contains("not") || lower.contains("keep") || lower.contains("rutin") ||
+            lower.contains("calendar") || lower.contains("takvim") || lower.contains("task") ||
+            lower.contains("clock") || lower.contains("saat") -> "Verimlilik"
+
+            lower.contains("game") || lower.contains("oyun") -> "Oyun"
+
+            else -> "Uygulama"
         }
-    }
-
-    private fun generateHourlyTimeline(apps: List<AppUsageInfo>): List<HourlyUsageSlot> {
-        val topAppNames = apps.map { it.appName }
-        val currentHour = LocalDateTime.now().hour
-
-        val slots = mutableListOf<HourlyUsageSlot>()
-        val intervals = listOf(
-            Triple("07:00 - 09:00", 7, 9),
-            Triple("09:00 - 12:00", 9, 12),
-            Triple("12:00 - 15:00", 12, 15),
-            Triple("15:00 - 18:00", 15, 18),
-            Triple("18:00 - 21:00", 18, 21),
-            Triple("21:00 - 00:00", 21, 24)
-        )
-
-        for (interval in intervals) {
-            if (currentHour >= interval.second - 2) {
-                val sampleApps = topAppNames.shuffled().take(2.coerceAtMost(topAppNames.size))
-                val minutes = when {
-                    interval.second < 9 -> (15..35).random()
-                    interval.second in 9..12 -> (30..55).random()
-                    interval.second in 12..15 -> (20..50).random()
-                    interval.second in 15..18 -> (35..65).random()
-                    else -> (25..60).random()
-                }
-                slots.add(
-                    HourlyUsageSlot(
-                        hourLabel = interval.first,
-                        startHour = interval.second,
-                        endHour = interval.third,
-                        minutesSpent = minutes,
-                        topApps = sampleApps
-                    )
-                )
-            }
-        }
-
-        if (slots.isEmpty()) {
-            slots.add(
-                HourlyUsageSlot(
-                    hourLabel = "09:00 - 12:00",
-                    startHour = 9,
-                    endHour = 12,
-                    minutesSpent = 38,
-                    topApps = listOf(topAppNames.firstOrNull() ?: "Rutin & Notlar")
-                )
-            )
-        }
-
-        return slots
-    }
-
-    private fun generateSimulatedScreenTime(hasPermission: Boolean): ScreenTimeSummary {
-        val simulatedApps = listOf(
-            AppUsageInfo(
-                packageName = "com.instagram.android",
-                appName = "Instagram",
-                durationMinutes = 94,
-                percentageOfTotal = 39,
-                color = Color(0xFFE1306C),
-                sessionCount = 22,
-                category = "Sosyal Medya"
-            ),
-            AppUsageInfo(
-                packageName = "com.google.android.youtube",
-                appName = "YouTube",
-                durationMinutes = 68,
-                percentageOfTotal = 28,
-                color = Color(0xFFFF0000),
-                sessionCount = 8,
-                category = "Medya & Eğlence"
-            ),
-            AppUsageInfo(
-                packageName = "com.whatsapp",
-                appName = "WhatsApp",
-                durationMinutes = 42,
-                percentageOfTotal = 17,
-                color = Color(0xFF25D366),
-                sessionCount = 35,
-                category = "İletişim"
-            ),
-            AppUsageInfo(
-                packageName = "com.android.chrome",
-                appName = "Chrome",
-                durationMinutes = 26,
-                percentageOfTotal = 11,
-                color = Color(0xFF4285F4),
-                sessionCount = 11,
-                category = "Tarayıcı"
-            ),
-            AppUsageInfo(
-                packageName = "com.nororoutine.batu",
-                appName = "NoroRoutine",
-                durationMinutes = 15,
-                percentageOfTotal = 5,
-                color = Color(0xFF8B5CF6),
-                sessionCount = 6,
-                category = "Verimlilik"
-            )
-        )
-
-        val totalMins = simulatedApps.sumOf { it.durationMinutes }
-
-        val timeline = listOf(
-            HourlyUsageSlot("08:00 - 10:00", 8, 10, 32, listOf("WhatsApp", "Instagram")),
-            HourlyUsageSlot("10:00 - 12:30", 10, 12, 45, listOf("NoroRoutine", "Chrome")),
-            HourlyUsageSlot("12:30 - 15:00", 12, 15, 52, listOf("YouTube", "Instagram")),
-            HourlyUsageSlot("15:00 - 18:00", 15, 18, 68, listOf("YouTube", "WhatsApp")),
-            HourlyUsageSlot("18:00 - 21:00", 18, 21, 48, listOf("Instagram", "Chrome"))
-        )
-
-        return ScreenTimeSummary(
-            totalMinutes = totalMins,
-            top3Apps = simulatedApps.take(3),
-            allApps = simulatedApps,
-            unlocksCount = 47,
-            hourlyTimeline = timeline,
-            hasPermission = hasPermission
-        )
     }
 
     fun formatDuration(minutes: Long): String {

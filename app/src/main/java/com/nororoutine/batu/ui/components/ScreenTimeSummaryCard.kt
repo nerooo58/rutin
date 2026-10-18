@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Smartphone
-import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nororoutine.batu.screentime.ScreenTimeManager
-import com.nororoutine.batu.screentime.ScreenTimeSummary
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
 import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
@@ -70,7 +70,7 @@ fun ScreenTimeSummaryCard(
             .padding(14.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header: Clickable title to open detailed timeline & hourly breakdown
+            // Header: Title + Ayrıntılar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -100,14 +100,14 @@ fun ScreenTimeSummaryCard(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Bugün cihaz başında",
-                            color = SubtitleWhite,
+                            text = if (summary.hasPermission) "Canlı Cihaz Kullanımı" else "İzin Gerekli",
+                            color = if (summary.hasPermission) SubtitleWhite else Color(0xFFFBBF24),
                             fontSize = 10.sp
                         )
                     }
                 }
 
-                // "Ayrıntılar" pill with chevron
+                // "Ayrıntılar" pill
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
@@ -134,100 +134,161 @@ fun ScreenTimeSummaryCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Total Duration Highlight
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    Text(
-                        text = ScreenTimeManager.formatDuration(summary.totalMinutes),
-                        color = PureWhite,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.5).sp
-                    )
-                }
-
+            if (!summary.hasPermission) {
+                // Permission required prompt
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x22FFFFFF))
-                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x22F59E0B))
+                        .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(10.dp)
                 ) {
-                    Text(
-                        text = "${summary.unlocksCount} Oturum",
-                        color = SubtitleWhite,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Top 3 Apps breakdown
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                summary.top3Apps.forEach { app ->
-                    val progress = (app.percentageOfTotal / 100f).coerceIn(0.04f, 1f)
-                    val animatedProgress by animateFloatAsState(
-                        targetValue = progress,
-                        animationSpec = tween(500),
-                        label = "miniProgress"
-                    )
-
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(app.color)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = app.appName,
-                                    color = PureWhite,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${ScreenTimeManager.formatDuration(app.durationMinutes)} (%${app.percentageOfTotal})",
+                                text = "Kullanım Erişimi İzni Verin",
+                                color = Color(0xFFFBBF24),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Gerçek uygulama sürelerini görmek için izni açın",
                                 color = SubtitleWhite,
                                 fontSize = 10.sp
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(3.dp))
-
-                        // Mini progress bar
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0x22FFFFFF))
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFF59E0B))
+                                .clickable { ScreenTimeManager.openUsageAccessSettings(context) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(animatedProgress)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(app.color)
+                            Text(
+                                text = "İzni Aç",
+                                color = Color.Black,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
                             )
+                        }
+                    }
+                }
+            } else {
+                // Real Screen Time Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column {
+                        Text(
+                            text = ScreenTimeManager.formatDuration(summary.totalMinutes),
+                            color = PureWhite,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.5).sp
+                        )
+                    }
+
+                    if (summary.unlocksCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x22FFFFFF))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "${summary.unlocksCount} Kilit Açma",
+                                color = SubtitleWhite,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (summary.top3Apps.isEmpty()) {
+                    Text(
+                        text = "Bugün henüz kaydedilmiş uygulama kullanımı yok.",
+                        color = SubtitleWhite,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    // Top 3 Apps Breakdown
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        summary.top3Apps.forEach { app ->
+                            val progress = (app.percentageOfTotal / 100f).coerceIn(0.04f, 1f)
+                            val animatedProgress by animateFloatAsState(
+                                targetValue = progress,
+                                animationSpec = tween(500),
+                                label = "miniProgress"
+                            )
+
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(app.color)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = app.appName,
+                                            color = PureWhite,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    Text(
+                                        text = "${ScreenTimeManager.formatDuration(app.durationMinutes)} (%${app.percentageOfTotal})",
+                                        color = SubtitleWhite,
+                                        fontSize = 10.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(3.dp))
+
+                                // Mini progress bar
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .background(Color(0x22FFFFFF))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(animatedProgress)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(app.color)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

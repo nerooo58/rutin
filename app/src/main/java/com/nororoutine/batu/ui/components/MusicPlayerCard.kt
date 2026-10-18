@@ -21,26 +21,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.VolumeDown
 import androidx.compose.material.icons.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,15 +52,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nororoutine.batu.audio.FocusAudioManager
-import com.nororoutine.batu.audio.MusicSourceMode
+import com.nororoutine.batu.audio.DeviceMusicManager
+import com.nororoutine.batu.audio.DeviceTrack
 import com.nororoutine.batu.ui.theme.AccentPurple
 import com.nororoutine.batu.ui.theme.AccentTeal
 import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
@@ -71,12 +73,23 @@ fun MusicPlayerCard(
     isCompact: Boolean = false
 ) {
     val context = LocalContext.current
-    val isPlaying by FocusAudioManager.isPlaying.collectAsState()
-    val mode by FocusAudioManager.currentMode.collectAsState()
-    val trackIndex by FocusAudioManager.currentTrackIndex.collectAsState()
-    val volume by FocusAudioManager.volume.collectAsState()
+    val tracks by DeviceMusicManager.tracks.collectAsState()
+    val trackIndex by DeviceMusicManager.currentTrackIndex.collectAsState()
+    val isPlaying by DeviceMusicManager.isPlaying.collectAsState()
+    val currentPosMs by DeviceMusicManager.currentPositionMs.collectAsState()
+    val volume by DeviceMusicManager.volume.collectAsState()
+    val hasQueried by DeviceMusicManager.hasQueriedTracks.collectAsState()
 
-    val currentTrack = remember(trackIndex) { FocusAudioManager.getCurrentTrack() }
+    var showTrackList by remember { mutableStateOf(false) }
+
+    // Load actual device tracks on initial display
+    LaunchedEffect(Unit) {
+        DeviceMusicManager.refreshDeviceTracks(context)
+    }
+
+    val currentTrack: DeviceTrack? = remember(tracks, trackIndex) {
+        DeviceMusicManager.getCurrentTrack()
+    }
 
     Box(
         modifier = modifier
@@ -86,7 +99,7 @@ fun MusicPlayerCard(
             .padding(14.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header: Icon + Mode Switcher + Open Music App
+            // Header: Title + Track Count / Status + Open Music App
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -101,7 +114,7 @@ fun MusicPlayerCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = if (mode == MusicSourceMode.FOCUS_SOUNDS) Icons.Rounded.Headphones else Icons.Rounded.MusicNote,
+                            imageVector = Icons.Rounded.MusicNote,
                             contentDescription = null,
                             tint = if (isPlaying) AccentTeal else AccentPurple,
                             modifier = Modifier.size(16.dp)
@@ -110,61 +123,80 @@ fun MusicPlayerCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Müzik & Odak Sesi",
+                            text = "Cihaz Müziği",
                             color = PureWhite,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (mode == MusicSourceMode.FOCUS_SOUNDS) "432Hz Frekans Ambiyansı" else "Sistem / Spotify Kontrolü",
+                            text = if (tracks.isNotEmpty()) {
+                                "${tracks.size} Yerel Parça Bulundu"
+                            } else {
+                                "Spotify / Cihaz Medya Kontrolü"
+                            },
                             color = SubtitleWhite,
                             fontSize = 10.sp
                         )
                     }
                 }
 
-                // Mode Pills (Odak / Sistem)
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0x33FFFFFF))
-                        .padding(2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (mode == MusicSourceMode.FOCUS_SOUNDS) AccentTeal.copy(alpha = 0.35f) else Color.Transparent)
-                            .clickable { FocusAudioManager.setMode(MusicSourceMode.FOCUS_SOUNDS) }
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "Odak",
-                            color = if (mode == MusicSourceMode.FOCUS_SOUNDS) PureWhite else MutedWhite,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                // Header Actions: Local Tracks List toggle & Open external music app
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (tracks.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (showTrackList) AccentPurple.copy(alpha = 0.35f) else Color(0x22FFFFFF))
+                                .clickable { showTrackList = !showTrackList }
+                                .padding(horizontal = 7.dp, vertical = 4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Rounded.QueueMusic,
+                                    contentDescription = "Parça Listesi",
+                                    tint = PureWhite,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Parçalar",
+                                    color = PureWhite,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
+
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (mode == MusicSourceMode.SYSTEM_MEDIA) AccentPurple.copy(alpha = 0.35f) else Color.Transparent)
-                            .clickable { FocusAudioManager.setMode(MusicSourceMode.SYSTEM_MEDIA) }
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x2210B981))
+                            .clickable { DeviceMusicManager.openMusicApp(context) }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
-                        Text(
-                            text = "Müzik",
-                            color = if (mode == MusicSourceMode.SYSTEM_MEDIA) PureWhite else MutedWhite,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.OpenInNew,
+                                contentDescription = "Uygulamayı Aç",
+                                tint = Color(0xFF34D399),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Uygulama",
+                                color = Color(0xFF34D399),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Track Info & Equalizer Animation
+            // Track Info Card & Equalizer Animation
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -176,7 +208,7 @@ fun MusicPlayerCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (mode == MusicSourceMode.FOCUS_SOUNDS) currentTrack.title else "Cihazda Çalan Müzik",
+                        text = currentTrack?.title ?: if (isPlaying) "Cihazda Müzik Çalıyor" else "Cihaz Müzik Çaları",
                         color = PureWhite,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -184,98 +216,159 @@ fun MusicPlayerCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = if (mode == MusicSourceMode.FOCUS_SOUNDS) currentTrack.subtitle else "Spotify / YouTube Music",
+                        text = currentTrack?.artist ?: "Spotify / YouTube Music / MP3",
                         color = SubtitleWhite,
                         fontSize = 10.sp,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Dancing Equalizer Waves
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Dancing Equalizer Visualizer
                 EqualizerVisualizer(isPlaying = isPlaying)
             }
 
-            // Soundscape Track Selectors if in FOCUS mode
-            if (mode == MusicSourceMode.FOCUS_SOUNDS) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+            // Expandable Track List for Local Audio
+            AnimatedVisibility(visible = showTrackList && tracks.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x990A0F1D))
+                        .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(12.dp))
+                        .padding(8.dp)
                 ) {
-                    FocusAudioManager.focusTracks.forEachIndexed { index, track ->
-                        val isSelected = index == trackIndex
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) AccentTeal.copy(alpha = 0.25f) else Color(0x1AFFFFFF))
-                                .border(
-                                    1.dp,
-                                    if (isSelected) AccentTeal.copy(alpha = 0.6f) else Color.Transparent,
-                                    RoundedCornerShape(8.dp)
+                    Text(
+                        text = "Cihazdaki Şarkılar (${tracks.size})",
+                        color = PureWhite,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        itemsIndexed(tracks) { idx, t ->
+                            val isCurrent = idx == trackIndex
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isCurrent) AccentPurple.copy(alpha = 0.25f) else Color.Transparent)
+                                    .clickable { DeviceMusicManager.playTrack(context, idx) }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = t.title,
+                                        color = if (isCurrent) PureWhite else MutedWhite,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = t.artist,
+                                        color = SubtitleWhite,
+                                        fontSize = 9.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                                Text(
+                                    text = DeviceMusicManager.formatTime(t.durationMs),
+                                    color = SubtitleWhite,
+                                    fontSize = 9.sp
                                 )
-                                .clickable { FocusAudioManager.selectTrack(index) }
-                                .padding(vertical = 5.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = track.genre,
-                                color = if (isSelected) PureWhite else MutedWhite,
-                                fontSize = 9.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
+                            }
                         }
+                    }
+                }
+            }
+
+            // Seekbar (when local track is loaded with duration)
+            if (currentTrack != null && currentTrack.durationMs > 0) {
+                Spacer(modifier = Modifier.height(6.dp))
+                val totalMs = currentTrack.durationMs
+                val progress = (currentPosMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Slider(
+                        value = progress,
+                        onValueChange = { newPct ->
+                            val targetMs = (newPct * totalMs).toLong()
+                            DeviceMusicManager.seekTo(targetMs)
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = AccentTeal,
+                            activeTrackColor = AccentTeal,
+                            inactiveTrackColor = Color(0x33FFFFFF)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(20.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = DeviceMusicManager.formatTime(currentPosMs),
+                            color = SubtitleWhite,
+                            fontSize = 9.sp
+                        )
+                        Text(
+                            text = DeviceMusicManager.formatTime(totalMs),
+                            color = SubtitleWhite,
+                            fontSize = 9.sp
+                        )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Player Controls Row
+            // Playback Controls Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Open App Button
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x2210B981))
-                        .clickable { FocusAudioManager.openMusicApp(context) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Rounded.OpenInNew,
-                            contentDescription = "Müzik Uygulamasını Aç",
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Spotify Aç",
-                            color = Color(0xFF10B981),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                // Info indicator
+                Text(
+                    text = if (tracks.isNotEmpty()) {
+                        "${trackIndex + 1}/${tracks.size}"
+                    } else {
+                        "Cihaz Medyası"
+                    },
+                    color = SubtitleWhite,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
 
-                // Main Playback Controls
+                // Skip Prev, Play/Pause, Skip Next
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { FocusAudioManager.prevTrack(context) },
+                        onClick = { DeviceMusicManager.prevTrack(context) },
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SkipPrevious,
                             contentDescription = "Önceki",
                             tint = PureWhite,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
@@ -283,48 +376,51 @@ fun MusicPlayerCard(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(Color(0xFF8B5CF6), Color(0xFF06B6D4))
-                                )
-                            )
-                            .clickable { FocusAudioManager.togglePlayPause(context) },
+                            .background(if (isPlaying) AccentTeal else AccentPurple)
+                            .clickable { DeviceMusicManager.togglePlayPause(context) },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (isPlaying) "Durdur" else "Oynat",
+                            contentDescription = if (isPlaying) "Duraklat" else "Oynat",
                             tint = PureWhite,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
                     IconButton(
-                        onClick = { FocusAudioManager.nextTrack(context) },
+                        onClick = { DeviceMusicManager.nextTrack(context) },
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.SkipNext,
                             contentDescription = "Sonraki",
                             tint = PureWhite,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
 
-                // Volume Indicator / Toggle
+                // Volume mini control
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = if (volume > 0.4f) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeDown,
+                        imageVector = if (volume > 0.05f) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeDown,
                         contentDescription = "Ses",
                         tint = SubtitleWhite,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "${(volume * 100).toInt()}%",
-                        color = SubtitleWhite,
-                        fontSize = 10.sp
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Slider(
+                        value = volume,
+                        onValueChange = { DeviceMusicManager.setVolume(context, it) },
+                        colors = SliderDefaults.colors(
+                            thumbColor = PureWhite,
+                            activeTrackColor = AccentPurple,
+                            inactiveTrackColor = Color(0x33FFFFFF)
+                        ),
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(20.dp)
                     )
                 }
             }
@@ -333,68 +429,66 @@ fun MusicPlayerCard(
 }
 
 @Composable
-fun EqualizerVisualizer(isPlaying: Boolean) {
+fun EqualizerVisualizer(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "equalizer")
 
-    val h1 by infiniteTransition.animateFloat(
+    val bar1 by infiniteTransition.animateFloat(
         initialValue = 0.2f,
-        targetValue = 0.95f,
+        targetValue = if (isPlaying) 0.95f else 0.2f,
         animationSpec = infiniteRepeatable(
             animation = tween(420, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "h1"
+        label = "b1"
     )
 
-    val h2 by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 0.25f,
+    val bar2 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = if (isPlaying) 1.0f else 0.3f,
         animationSpec = infiniteRepeatable(
             animation = tween(310, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "h2"
+        label = "b2"
     )
 
-    val h3 by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
+    val bar3 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = if (isPlaying) 0.85f else 0.25f,
         animationSpec = infiniteRepeatable(
-            animation = tween(530, easing = FastOutSlowInEasing),
+            animation = tween(480, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "h3"
+        label = "b3"
     )
 
-    val h4 by infiniteTransition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 0.3f,
+    val bar4 by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = if (isPlaying) 0.75f else 0.2f,
         animationSpec = infiniteRepeatable(
-            animation = tween(380, easing = FastOutSlowInEasing),
+            animation = tween(360, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "h4"
+        label = "b4"
     )
 
     Row(
-        modifier = Modifier
-            .height(18.dp)
-            .width(28.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = modifier
+            .height(20.dp)
+            .width(22.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.Bottom
     ) {
-        listOf(h1, h2, h3, h4).forEach { heightFraction ->
-            val actualHeight = if (isPlaying) heightFraction else 0.2f
+        listOf(bar1, bar2, bar3, bar4).forEach { heightFraction ->
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(actualHeight)
+                    .fillMaxHeight(heightFraction.coerceIn(0.15f, 1f))
                     .clip(RoundedCornerShape(999.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF06B6D4), Color(0xFF8B5CF6))
-                        )
-                    )
+                    .background(if (isPlaying) AccentTeal else MutedWhite.copy(alpha = 0.4f))
             )
         }
     }
