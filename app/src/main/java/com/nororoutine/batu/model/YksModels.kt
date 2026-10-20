@@ -15,7 +15,8 @@ data class ExamSubjectResult(
     val incorrect: Int,
     val empty: Int,
     val net: Float = (correct.toFloat() - (incorrect.toFloat() * 0.25f)).coerceAtLeast(0f),
-    val weakTopics: List<String> = emptyList()
+    val weakTopics: List<String> = emptyList(),
+    val totalQuestions: Int = correct + incorrect + empty
 )
 
 data class DeficiencyItem(
@@ -51,7 +52,12 @@ data class YksExamRecord(
     val targetNet: Float = 90f,
     val notes: String = "",
     val aiAnalysis: YksAiAnalysis? = null
-)
+) {
+    val totalQuestions: Int get() = results.sumOf { it.totalQuestions }
+    val totalCorrect: Int get() = results.sumOf { it.correct }
+    val totalIncorrect: Int get() = results.sumOf { it.incorrect }
+    val totalEmpty: Int get() = results.sumOf { it.empty }
+}
 
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
@@ -111,5 +117,23 @@ data class MathSolution(
     val subject: String = "Matematik", // Matematik, Fizik, Kimya
     val chemicalEquation: String? = null,
     val physicsFormulas: List<String> = emptyList()
+)
+
+data class StudySession(
+    val id: String = UUID.randomUUID().toString(),
+    val title: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val formattedDate: String,
+    val description: String,
+    val imageUri: String? = null,
+    val questions: List<QuizQuestion> = emptyList(),
+    val userAnswers: Map<String, Int> = emptyMap(), // questionId -> selectedOptionIndex (0..4)
+    val isCompleted: Boolean = false,
+    val correctCount: Int = 0,
+    val incorrectCount: Int = 0,
+    val emptyCount: Int = 0,
+    val netScore: Float = 0f,
+    val analysisFeedback: String = "",
+    val weakTopicsToFocus: List<String> = emptyList()
 )
 

@@ -55,10 +55,19 @@ fun ScreenTimeSummaryCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var summary by remember { mutableStateOf(ScreenTimeManager.getTodayScreenTime(context)) }
 
-    LaunchedEffect(Unit) {
-        summary = ScreenTimeManager.getTodayScreenTime(context)
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                summary = ScreenTimeManager.getTodayScreenTime(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     Box(
@@ -184,9 +193,15 @@ fun ScreenTimeSummaryCard(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
+                        Text(
+                            text = "Bugünkü Toplam Süre",
+                            color = SubtitleWhite,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = ScreenTimeManager.formatDuration(summary.totalMinutes),
                             color = PureWhite,
@@ -195,27 +210,12 @@ fun ScreenTimeSummaryCard(
                             letterSpacing = (-0.5).sp
                         )
                     }
-
-                    if (summary.unlocksCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x22FFFFFF))
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "${summary.unlocksCount} Kilit Açma",
-                                color = SubtitleWhite,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                if (summary.top3Apps.isEmpty()) {
+                val appsToShow = if (summary.allApps.isNotEmpty()) summary.allApps.take(4) else summary.top3Apps
+                if (appsToShow.isEmpty()) {
                     Text(
                         text = "Bugün henüz kaydedilmiş uygulama kullanımı yok.",
                         color = SubtitleWhite,
@@ -223,12 +223,12 @@ fun ScreenTimeSummaryCard(
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 } else {
-                    // Top 3 Apps Breakdown
+                    // Used Apps Breakdown
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        summary.top3Apps.forEach { app ->
+                        appsToShow.forEach { app ->
                             val progress = (app.percentageOfTotal / 100f).coerceIn(0.04f, 1f)
                             val animatedProgress by animateFloatAsState(
                                 targetValue = progress,

@@ -171,7 +171,9 @@ fun MainScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )
-                        2 -> com.nororoutine.batu.ui.screens.YksCoachScreen()
+                        2 -> com.nororoutine.batu.ui.screens.YksCoachScreen(
+                            rutinViewModel = viewModel
+                        )
                         3 -> HistoryScreen(
                             viewModel = viewModel,
                             uiState = uiState

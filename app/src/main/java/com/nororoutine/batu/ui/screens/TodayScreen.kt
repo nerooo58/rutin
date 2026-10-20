@@ -23,6 +23,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -1008,12 +1010,14 @@ fun LandscapeTodayLayout(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val tabletLeftScrollState = rememberScrollState()
         // Left Side: Time, Date, Weather Card, Music Player & Screen Time Card
         Column(
             modifier = Modifier
                 .weight(1.1f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxHeight()
+                .verticalScroll(tabletLeftScrollState),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1135,13 +1139,12 @@ fun LandscapeTodayLayout(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xE6131D31))
                     .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(18.dp))
                     .padding(14.dp)
             ) {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1150,59 +1153,73 @@ fun LandscapeTodayLayout(
                         Text(
                             text = "Günün Rutinleri",
                             color = PureWhite,
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Paylaş Butonu
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(AccentPurple.copy(alpha = 0.3f))
+                                    .background(AccentPurple.copy(alpha = 0.25f))
+                                    .border(1.dp, AccentPurple.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
                                     .clickable { onOpenStoryShare() }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
                                     Icon(
                                         imageVector = Icons.Rounded.Share,
                                         contentDescription = "Hikaye Paylaş",
                                         tint = PureWhite,
-                                        modifier = Modifier.size(11.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Paylaş",
                                         color = PureWhite,
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
+
+                            // Tümünü Gör Butonu
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(AccentTeal.copy(alpha = 0.25f))
+                                    .background(AccentTeal.copy(alpha = 0.22f))
+                                    .border(1.dp, AccentTeal.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
                                     .clickable { onViewRoutinesClick() }
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
-                                Text(
-                                    text = "Tümünü Gör",
-                                    color = AccentTeal,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "Tümünü Gör",
+                                        color = AccentTeal,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     if (todayRoutines.isEmpty()) {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize(),
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -1212,12 +1229,12 @@ fun LandscapeTodayLayout(
                             )
                         }
                     } else {
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                        // Render directly in Column so the entire tablet left column scrolls naturally
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            items(todayRoutines.size, key = { todayRoutines[it].id }) { idx ->
-                                val r = todayRoutines[idx]
+                            todayRoutines.forEachIndexed { idx, r ->
                                 val logKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${r.id}"
                                 val isDone = uiState.logs[logKey]?.isDone == true
                                 val timeStr = r.startTime.ifEmpty { r.time }
@@ -1344,6 +1361,9 @@ fun LandscapeTodayLayout(
                     }
                 }
             }
+
+            // Scroll bottom padding so entire list can be viewed comfortably
+            Spacer(modifier = Modifier.height(72.dp))
         }
 
         // Right Side: Active / Focused Routine Cards Carousel (kaydırmalı kartlar tıpkı telefondaki gibi)

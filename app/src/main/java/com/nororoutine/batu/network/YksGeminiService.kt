@@ -203,12 +203,15 @@ object YksGeminiService {
     }
 
     /**
-     * Interactive Chat with YKS 2028 Maarif Modeli Coach
+     * Interactive Chat with AI Study Coach with full context of routines, weekly analysis, and trial exams.
      */
     suspend fun chatWithCoach(
         history: List<ChatMessage>,
         userMessage: String,
-        latestExam: YksExamRecord?
+        latestExam: YksExamRecord? = null,
+        routinesContext: String = "",
+        weeklyAnalysisContext: String = "",
+        examsSummaryContext: String = ""
     ): ChatMessage = withContext(Dispatchers.IO) {
         val apiKey = try {
             BuildConfig.GEMINI_API_KEY
@@ -216,16 +219,14 @@ object YksGeminiService {
             ""
         }
 
-        val studentContext = if (latestExam != null) {
-            "Öğrencinin son denemesi: '${latestExam.title}' (${latestExam.examType.displayName}), Toplam Net: %.2f. Zayıf konuları: ${
-                latestExam.results.flatMap { it.weakTopics }.take(4).joinToString(", ")
-            }."
-        } else {
-            "Öğrenci henüz deneme sonucu kaydetmedi, 2028 YKS Maarif Modeli hazırlığında."
-        }
-
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-            return@withContext generateHeuristicChatResponse(userMessage, latestExam)
+            return@withContext generateHeuristicChatResponse(
+                userMessage = userMessage,
+                latestExam = latestExam,
+                routinesContext = routinesContext,
+                weeklyAnalysisContext = weeklyAnalysisContext,
+                examsSummaryContext = examsSummaryContext
+            )
         }
 
         try {
@@ -233,29 +234,36 @@ object YksGeminiService {
             val url = URL(endpoint)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 12000
-                readTimeout = 12000
+                connectTimeout = 14000
+                readTimeout = 14000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             }
 
             val conversationPrompt = StringBuilder()
-            conversationPrompt.append("Sen 'NöroRoutine YKS 2028 & Türkiye Yüzyılı Maarif Modeli Akıllı Çalışma Koçu'sun.\n")
-            conversationPrompt.append("Öğrenci Bağlamı: $studentContext\n\n")
-            conversationPrompt.append("ROLÜN VE İLKELERİN:\n")
-            conversationPrompt.append("1. Samimi, enerjik, gerçekçi ve sonuç odaklısın. Öğrenciye rehberlik ederken 2028 Maarif Modelinin getirdiği beceri temelli (ezber değil çıkarım ve problem çözme) felsefeyi benimsersin.\n")
-            conversationPrompt.append("2. Öğrencinin deneme netlerini artırmak için net, uygulanabilir günlük adımlar ve taktikler verirsin.\n")
-            conversationPrompt.append("3. Cevabının sonunda öğrencinin tıklayabileceği 2-3 adet devam önerisi (çip) sunarsın.\n\n")
+            conversationPrompt.append("Sen 'NöroRoutine Akıllı Ders & Sınav Koçu'sun.\n")
+            conversationPrompt.append("ÖĞRENCİNİN CANLI VERİLERİ (Rutinler, Haftalık Analiz, Denemeler):\n")
+            if (routinesContext.isNotBlank()) conversationPrompt.append("- Günlük Rutinleri: $routinesContext\n")
+            if (weeklyAnalysisContext.isNotBlank()) conversationPrompt.append("- Haftalık Analiz & Alışkanlık Durumu: $weeklyAnalysisContext\n")
+            if (examsSummaryContext.isNotBlank()) conversationPrompt.append("- Deneme Sınavları & Net Bilgileri:\n$examsSummaryContext\n")
+            else if (latestExam != null) conversationPrompt.append("- Son Denemesi: '${latestExam.title}' (${latestExam.examType.displayName}), Net: %.2f\n".format(latestExam.totalNet))
 
-            // Append last 4 messages for context
-            val recentHistory = history.takeLast(4)
+            conversationPrompt.append("\nTEMEL İLKELERİN VE KURALLARIN:\n")
+            conversationPrompt.append("1. Normal, zeki, derin düşünen ve analiz yeteneği olan bir yapay zeka gibi konuş. Asla kalıplaşmış, her soruya aynı olan tekdüze cevaplar verme.\n")
+            conversationPrompt.append("2. YALNIZCA ders, çalışma, sınavlar (YKS & MEB Maarif Modeli), rutin planlama ve akademik verimlilik üzerine konuş. Konu dışına çıkma.\n")
+            conversationPrompt.append("3. Öğrencinin eklediği rutinlere, haftalık tamamlama analizlerine ve deneme netlerine doğrudan atıfta bulunarak planlamalarını kolaylaştır.\n")
+            conversationPrompt.append("4. Samimi, gerçekçi ve motive edici bir dille, madde işaretleri veya paragraflar kullanarak açıklayıcı cevap ver.\n")
+            conversationPrompt.append("5. Cevabının sonunda öğrencinin tıklayabileceği 2-3 adet devam önerisi (chips) sun.\n\n")
+
+            // Append last 6 messages for context
+            val recentHistory = history.takeLast(6)
             for (msg in recentHistory) {
                 val role = if (msg.sender == "user") "Öğrenci" else "Koç"
                 conversationPrompt.append("$role: ${msg.text}\n")
             }
             conversationPrompt.append("Öğrenci: $userMessage\n\n")
             conversationPrompt.append("Koç olarak yanıtını şu JSON formatında ver:\n")
-            conversationPrompt.append("{\n  \"reply\": \"Cevabın (Türkçe, düzenli paragraflar ve madde işaretleri içerebilir)\",\n  \"chips\": [\"Öneri 1\", \"Öneri 2\", \"Öneri 3\"]\n}")
+            conversationPrompt.append("{\n  \"reply\": \"Cevabın (Türkçe, düzenli paragraflar ve gerekirse madde işaretleri)\",\n  \"chips\": [\"Öneri 1\", \"Öneri 2\", \"Öneri 3\"]\n}")
 
             val requestJson = JSONObject().apply {
                 val contents = JSONArray().apply {
@@ -305,7 +313,13 @@ object YksGeminiService {
             Log.e(TAG, "Failed calling Gemini chat", e)
         }
 
-        return@withContext generateHeuristicChatResponse(userMessage, latestExam)
+        return@withContext generateHeuristicChatResponse(
+            userMessage = userMessage,
+            latestExam = latestExam,
+            routinesContext = routinesContext,
+            weeklyAnalysisContext = weeklyAnalysisContext,
+            examsSummaryContext = examsSummaryContext
+        )
     }
 
     /**
@@ -497,6 +511,271 @@ object YksGeminiService {
         }
 
         return@withContext generateFallbackQuiz(subject, topic)
+    }
+
+    /**
+     * Generates a 5-option Quiz from uploaded resources (image, document, or custom description)
+     */
+    suspend fun generateStudyQuizFromResource(
+        description: String,
+        questionCount: Int = 5,
+        imageBase64: String? = null,
+        docText: String? = null
+    ): List<QuizQuestion> = withContext(Dispatchers.IO) {
+        val apiKey = try {
+            BuildConfig.GEMINI_API_KEY
+        } catch (e: Exception) {
+            ""
+        }
+
+        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            return@withContext generateFallbackStudyQuiz(description, questionCount, docText)
+        }
+
+        try {
+            val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent?key=$apiKey"
+            val url = URL(endpoint)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 18000
+                readTimeout = 18000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            }
+
+            val prompt = """
+                Sen MEB 'Türkiye Yüzyılı Maarif Modeli'ne ve YKS 2028 formatına hakim, kıdemli bir soru yazarısın.
+                Öğrencinin sağladığı kaynak/görsel/belge ve talimatı:
+                Açıklama / İstek: "$description"
+                ${if (!docText.isNullOrBlank()) "Metin/Belge İçeriği:\n$docText" else ""}
+                İstenen Soru Sayısı: $questionCount
+
+                SORU VE TEST KURALLARI (KESİN VE EKSİKSİZ):
+                1. Kaynakta veya görselde yer alan soru, konu, formül veya bilgiyi temel al.
+                2. Öğrencinin açıklamasına uygun olarak TAM $questionCount adet soru üret.
+                3. Her soru istisnasız TAM 5 SEÇENEKLİ olmalıdır (A, B, C, D, E).
+                4. Her soru için öğrencinin çözüm anında basıp yararlanabileceği yol gösterici bir İPUCU ('hints': [ipucu_metni]) ekle. İpucu cevabı doğrudan söylememeli, hangi kavramı veya formülü düşünmesi gerektiğini hatırlatmalıdır.
+                5. Her soru için doğru seçeneğin indeksini ('correctOptionIndex': 0..4; 0=A, 1=B, 2=C, 3=D, 4=E) ve adım adım kapsamlı çözümünü ('explanation') belirt.
+                6. Sorular ezber değil, yeni nesil çıkarım, beceri temelli ve analiz odaklı olsun.
+
+                SADECE şu JSON şemasında çıktı ver:
+                {
+                  "questions": [
+                    {
+                      "subject": "Ders Adı (örn: Fizik, Kimya, Matematik)",
+                      "topic": "Konu Başlığı",
+                      "questionText": "Soru metni...",
+                      "options": ["A) ...", "B) ...", "C) ...", "D) ...", "E) ..."],
+                      "correctOptionIndex": 0,
+                      "explanation": "Detaylı adım adım çözüm...",
+                      "skillType": "Beceri Temelli Muhakeme",
+                      "hints": ["İpucu: ..."]
+                    }
+                  ]
+                }
+            """.trimIndent()
+
+            val requestJson = JSONObject().apply {
+                val contents = JSONArray().apply {
+                    val contentObj = JSONObject().apply {
+                        val parts = JSONArray().apply {
+                            if (!imageBase64.isNullOrBlank()) {
+                                put(JSONObject().apply {
+                                    put("inlineData", JSONObject().apply {
+                                        put("mimeType", "image/jpeg")
+                                        put("data", imageBase64)
+                                    })
+                                })
+                            }
+                            put(JSONObject().apply { put("text", prompt) })
+                        }
+                        put("parts", parts)
+                    }
+                    put(contentObj)
+                }
+                put("contents", contents)
+                put("generationConfig", JSONObject().apply {
+                    put("temperature", 0.7)
+                    put("responseMimeType", "application/json")
+                })
+            }
+
+            OutputStreamWriter(connection.outputStream, "UTF-8").use { writer ->
+                writer.write(requestJson.toString())
+                writer.flush()
+            }
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val responseText = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+                val rootJson = JSONObject(responseText)
+                val text = rootJson.optJSONArray("candidates")?.getJSONObject(0)
+                    ?.optJSONObject("content")?.optJSONArray("parts")?.getJSONObject(0)?.optString("text", "") ?: ""
+                val cleaned = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val parsed = JSONObject(cleaned)
+                val qArr = parsed.optJSONArray("questions")
+                if (qArr != null && qArr.length() > 0) {
+                    val list = mutableListOf<QuizQuestion>()
+                    for (i in 0 until qArr.length()) {
+                        val qObj = qArr.getJSONObject(i)
+                        val optArr = qObj.optJSONArray("options")
+                        val options = mutableListOf<String>()
+                        if (optArr != null) {
+                            for (j in 0 until optArr.length()) options.add(optArr.getString(j))
+                        }
+                        val hintsList = mutableListOf<String>()
+                        val hArr = qObj.optJSONArray("hints")
+                        if (hArr != null && hArr.length() > 0) {
+                            for (h in 0 until hArr.length()) hintsList.add(hArr.getString(h))
+                        } else {
+                            hintsList.add("İpucu: Sorudaki temel kavramı ve verilenleri dikkatle analiz et.")
+                        }
+
+                        list.add(
+                            QuizQuestion(
+                                subject = qObj.optString("subject", "Ders"),
+                                topic = qObj.optString("topic", "Genel"),
+                                questionText = qObj.optString("questionText", "Soru"),
+                                options = if (options.size == 5) options else (options.take(5) + listOf("A) Doğru", "B) Yanlış", "C) Belirsiz", "D) Yok", "E) Hepsi")).take(5),
+                                correctOptionIndex = qObj.optInt("correctOptionIndex", 0).coerceIn(0, 4),
+                                explanation = qObj.optString("explanation", "Çözüm"),
+                                skillType = qObj.optString("skillType", "Beceri Temelli Muhakeme"),
+                                hints = hintsList,
+                                hint = hintsList.firstOrNull()
+                            )
+                        )
+                    }
+                    if (list.isNotEmpty()) return@withContext list
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed calling Gemini for study quiz", e)
+        }
+
+        return@withContext generateFallbackStudyQuiz(description, questionCount, docText)
+    }
+
+    /**
+     * Generates a comprehensive feedback and analysis report after quiz completion.
+     */
+    suspend fun generateStudyFeedbackAnalysis(
+        studyTitle: String,
+        questions: List<QuizQuestion>,
+        userAnswers: Map<String, Int>,
+        correctCount: Int,
+        incorrectCount: Int,
+        emptyCount: Int
+    ): Pair<String, List<String>> = withContext(Dispatchers.IO) {
+        val wrongTopics = mutableListOf<String>()
+        val correctTopics = mutableListOf<String>()
+
+        questions.forEach { q ->
+            val userAns = userAnswers[q.id]
+            if (userAns == q.correctOptionIndex) {
+                correctTopics.add(q.topic)
+            } else {
+                wrongTopics.add(q.topic)
+            }
+        }
+
+        val total = questions.size
+        val net = (correctCount.toFloat() - (incorrectCount.toFloat() * 0.25f)).coerceAtLeast(0f)
+
+        val apiKey = try { BuildConfig.GEMINI_API_KEY } catch (e: Exception) { "" }
+
+        if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY") {
+            try {
+                val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent?key=$apiKey"
+                val url = URL(endpoint)
+                val connection = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                }
+
+                val prompt = """
+                    Sen MEB 2028 YKS Maarif Modeli uzmanı kıdemli bir eğitim koçusun.
+                    Öğrenci az önce kaynak tabanlı bir çalışma quizi çözdü:
+                    Test: $studyTitle
+                    Toplam Soru: $total, Doğru: $correctCount, Yanlış: $incorrectCount, Boş: $emptyCount, Net: %.2f
+                    Doğru Yapılan Konular: ${correctTopics.distinct().joinToString(", ").ifBlank { "Yok" }}
+                    Yanlış/Boş Konular: ${wrongTopics.distinct().joinToString(", ").ifBlank { "Yok" }}
+
+                    GÖREVİN:
+                    Öğrencinin bu testteki performansını kontrol et. Özellikle 'şu konulara daha çok önem ver ve çalış' şeklinde nokta atışı yönlendir, güçlü yönlerini ve zayıf noktalarını açıkla.
+                    
+                    Şu JSON şemasında yanıt ver:
+                    {
+                      "analysis": "2-3 paragraflık samimi, net ve yönlendirici koçluk analizi",
+                      "weakTopicsToFocus": ["Odaklanılması gereken 1. konu", "2. konu"]
+                    }
+                """.trimIndent().format(net)
+
+                val requestJson = JSONObject().apply {
+                    val contents = JSONArray().apply {
+                        val contentObj = JSONObject().apply {
+                            val parts = JSONArray().apply {
+                                put(JSONObject().apply { put("text", prompt) })
+                            }
+                            put("parts", parts)
+                        }
+                        put(contentObj)
+                    }
+                    put("contents", contents)
+                    put("generationConfig", JSONObject().apply {
+                        put("temperature", 0.7)
+                        put("responseMimeType", "application/json")
+                    })
+                }
+
+                OutputStreamWriter(connection.outputStream, "UTF-8").use { writer ->
+                    writer.write(requestJson.toString())
+                    writer.flush()
+                }
+
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val resp = connection.inputStream.bufferedReader().use(BufferedReader::readText)
+                    val root = JSONObject(resp)
+                    val text = root.optJSONArray("candidates")?.getJSONObject(0)
+                        ?.optJSONObject("content")?.optJSONArray("parts")?.getJSONObject(0)?.optString("text", "") ?: ""
+                    val cleaned = text.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                    val p = JSONObject(cleaned)
+                    val analysis = p.optString("analysis", "")
+                    val wList = mutableListOf<String>()
+                    val wArr = p.optJSONArray("weakTopicsToFocus")
+                    if (wArr != null) {
+                        for (i in 0 until wArr.length()) wList.add(wArr.getString(i))
+                    }
+                    if (analysis.isNotBlank()) {
+                        return@withContext analysis to (if (wList.isNotEmpty()) wList else wrongTopics.distinct())
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Gemini study analysis failed", e)
+            }
+        }
+
+        // Heuristic analysis
+        val distinctWrong = wrongTopics.distinct()
+        val distinctCorrect = correctTopics.distinct()
+        val feedback = buildString {
+            append("🎯 **Çalışma Testi Değerlendirme ve Gelişim Analizi:**\n\n")
+            append("Toplam $total soruda $correctCount Doğru, $incorrectCount Yanlış ve $emptyCount Boş ile %.2f Net elde ettin.\n\n".format(net))
+            if (distinctWrong.isNotEmpty()) {
+                append("⚠️ **Bu Konulara Daha Çok Önem Ver ve Çalış:**\n")
+                distinctWrong.forEach { t ->
+                    append("• **$t:** Bu konudaki soru yapısında ve kavram ilişkilerinde eksiklik görünüyor. Konu özetini gözden geçirip en az 15-20 yeni nesil soru çözmelisin.\n")
+                }
+                append("\n")
+            }
+            if (distinctCorrect.isNotEmpty()) {
+                append("✅ **Güçlü Olduğun Alanlar:** ${distinctCorrect.joinToString(", ")} konularındaki muhakemen oldukça sağlam.\n\n")
+            }
+            append("💡 **Koç Tavsiyesi:** Maarif modelinde sorular bilgiyi doğrudan değil bir model/durum içinde sorduğundan, yanlış yaptığın sorularda şıkları neden elediğini mutlaka çözüm açıklaması ve ipuçları üzerinden incele.")
+        }
+
+        return@withContext feedback to (if (distinctWrong.isNotEmpty()) distinctWrong else listOf("Kavram Pekiştirme"))
     }
 
     /**
@@ -744,11 +1023,71 @@ object YksGeminiService {
 
     private fun generateHeuristicChatResponse(
         userMessage: String,
-        latestExam: YksExamRecord?
+        latestExam: YksExamRecord? = null,
+        routinesContext: String = "",
+        weeklyAnalysisContext: String = "",
+        examsSummaryContext: String = ""
     ): ChatMessage {
         val lower = userMessage.lowercase()
 
         val (reply, chips) = when {
+            lower.contains("rutin") || lower.contains("plan") || lower.contains("program") || lower.contains("günlük") -> {
+                val rutinText = if (routinesContext.isNotBlank()) {
+                    "📌 **Mevcut Rutinlerin:**\n$routinesContext\n"
+                } else {
+                    "Henüz eklenmiş bir rutinin görünmüyor ama ana ekrandan dilediğin ders ve alışkanlık rutinlerini ekleyebilirsin.\n"
+                }
+                val text = """
+                    📅 **Kişiselleştirilmiş Rutin & Çalışma Planı Analizi:**
+                    
+                    $rutinText
+                    ${if (weeklyAnalysisContext.isNotBlank()) "📊 **Haftalık Durumun:** $weeklyAnalysisContext\n" else ""}
+                    **Ders ve Rutin Optimizasyon Önerilerim:**
+                    1. **Zihin Tazeliği:** Zihinsel odağın en yüksek olduğu sabah saatlerine Paragraf ve Matematik Problem rutinlerini yerleştirmeni öneririm.
+                    2. **Blok Çalışma:** Rutinlerini 45 dk odaklanma + 10 dk mola şeklinde bloklara ayır.
+                    3. **Haftalık Deneme:** Haftada en az bir gününü rutin olarak genel denemeye veya branş denemesine ayırıp akşamında net analizi yap.
+                    
+                    Bu rutinlerin saatlerini düzenlemek veya yenilerini eklemek ister misin?
+                """.trimIndent()
+                text to listOf("Bugünkü Rutinlerimi İncele", "Deneme Netlerime Göre Plan Yap", "Haftalık Analizimi Göster")
+            }
+            lower.contains("deneme") || lower.contains("net") || lower.contains("sınav") -> {
+                val examsText = if (examsSummaryContext.isNotBlank()) {
+                    "📊 **Kayıtlı Deneme Sonuçların:**\n$examsSummaryContext\n"
+                } else if (latestExam != null) {
+                    "Son girdiğin '${latestExam.title}' denemesinde toplam %.1f net yapmıştın.\n".format(latestExam.totalNet)
+                } else {
+                    "Henüz sistemde kayıtlı bir denemen bulunmuyor. 'Deneme' sekmesinden çözdüğün denemeleri girdiğinde tüm ders netlerini detaylıca analiz edebilirim!\n"
+                }
+                val text = """
+                    🎯 **Deneme Netleri & Ders Bazlı Gelişim Stratejisi:**
+                    
+                    $examsText
+                    **Netleri Yükseltmek İçin 3 Aşamalı Yol Haritası:**
+                    • **Hata Analiz Defteri:** Yanlış veya boş bıraktığın soruların konularını tespit et.
+                    • **Nokta Atışı Tekrar:** En çok puan kaybettiğin ilk 2 derse önümüzdeki 3 gün boyunca günlük 20'şer beceri temelli soru çöz.
+                    • **Süre Yönetimi:** Denemelerde turlama tekniğini uygula; ilk turda sadece emin olduğun soruları çözüp zorlandıklarını ikinci tura bırak.
+                    
+                    Hangi dersin netini yükseltmeye odaklanalım?
+                """.trimIndent()
+                text to listOf("Matematik Netini Artır", "Türkçe Paragraf Taktikleri", "Yeni Deneme Ekle")
+            }
+            lower.contains("haftalık") || lower.contains("analiz") || lower.contains("performans") -> {
+                val perfText = if (weeklyAnalysisContext.isNotBlank()) {
+                    "📈 **Haftalık Performans Dökümün:**\n$weeklyAnalysisContext\n"
+                } else {
+                    "Günlük rutinlerini tamamladıkça haftalık analizlerin ve alışkanlık serilerin burada birikiyor.\n"
+                }
+                val text = """
+                    📊 **Haftalık İlerleme & Verimlilik Değerlendirmesi:**
+                    
+                    $perfText
+                    İstikrarlı çalışma, yüksek motivasyondan daha değerlidir. Günlük rutinlerini aksatmadan sürdürmek, YKS 2028 maratonunda seni en ön sıraya taşıyacaktır.
+                    
+                    Bu haftaki çalışma hedeflerini gözden geçirelim mi?
+                """.trimIndent()
+                text to listOf("Rutinlerimi Düzenle", "Zayıf Derslerime Odaklan", "Kaynaklı Quiz Başlat")
+            }
             lower.contains("maarif") || lower.contains("2028") -> {
                 val text = """
                     🎯 **2028 YKS & Türkiye Yüzyılı Maarif Modeli Yol Haritası:**
@@ -763,23 +1102,6 @@ object YksGeminiService {
                 """.trimIndent()
                 text to listOf("Matematik Problemler Taktikleri", "Türkçe Paragrafı Hızlandırma", "Fizik Deney Soruları")
             }
-            lower.contains("deneme") || lower.contains("net") -> {
-                val netInfo = if (latestExam != null) "Son denemen '${latestExam.title}'de toplam %.1f net yapmıştın.".format(latestExam.totalNet) else "Henüz bir deneme sonucu girmedin ama hiç dert değil!"
-                val text = """
-                    📊 **Netlerini Zirveye Taşıma Stratejisi:**
-                    
-                    $netInfo
-                    
-                    Net artışında yapılan en büyük hata, 'her gün rastgele soru çözmektir'. 
-                    Bunun yerine **Eksik Odaklı Döngü** uygulamalısın:
-                    • Her yanlış yaptığın sorunun hangi konudan olduğunu not et.
-                    • O konudan 3 gün boyunca her gün 20 adet beceri temelli soru çöz.
-                    • Haftalık mini branş denemesiyle eksikliğin kapanıp kapanmadığını test et.
-                    
-                    Deneme analiz ekranımızdan hemen son denemeni gir, sana anında nokta atışı reçete çıkarayım!
-                """.trimIndent()
-                text to listOf("Denememi Analiz Et", "Türkçe Neti Nasıl Artar?", "Haftalık Çalışma Programı Yap")
-            }
             lower.contains("matematik") || lower.contains("geometri") -> {
                 val text = """
                     📐 **2028 Maarif Modeli Matematik Başarı Reçetesi:**
@@ -788,9 +1110,21 @@ object YksGeminiService {
                     • **Fonksiyonlar:** Grafiği zihninde canlandır. Maarif modelinde fonksiyonların gerçek hayat modellemeleri (hız-zaman, maliyet-kar) sıkça gelir.
                     • **Geometri:** Formülü ezberleme, benzerlik ve Pisagor'un nereden çıktığını mantığınla kavra.
                     
-                    İstersen sana şu an hemen çözmen için Maarif Modeli uyumlu 3 tane yeni nesil soru üreteyim mi?
+                    Çalışma sekmesinden hemen matematik notu veya sorusu yükleyip sana özel 5 şıklı quiz hazırlatabilirsin!
                 """.trimIndent()
-                text to listOf("Bana Matematik Sorusu Üret", "Geometriye Nasıl Çalışılır?", "Deneme Analizine Git")
+                text to listOf("Çalışma Kısmına Git", "Geometriye Nasıl Çalışılır?", "Denememi Analiz Et")
+            }
+            lower.contains("fizik") || lower.contains("kimya") || lower.contains("biyoloji") || lower.contains("fen") -> {
+                val text = """
+                    🔬 **Fen Bilimleri (Fizik, Kimya, Biyoloji) Maarif Taktikleri:**
+                    
+                    • **Fizik:** Formülleri ezberlemek yerine birim analizine ve grafik alan/eğim ilişkilerine odaklan.
+                    • **Kimya:** Mol kavramı, tepkime entalpisi ve denge konularında orantı mantığını iyi kur.
+                    • **Biyoloji:** Şemaları ve biyolojik süreç döngülerini (fotosentez, hücresel solunum, kalıtım) kendin çizerek çalış.
+                    
+                    Fen derslerinden çözmek istediğin bir sorunun veya konunun fotoğrafını 'Çalışma' bölümüne yükleyip anında test hazırlatabilirsin!
+                """.trimIndent()
+                text to listOf("Fen Soru Fotoğrafı Yükle", "Fizik Deney Soruları", "Deneme Netlerimi Gör")
             }
             lower.contains("türkçe") || lower.contains("paragraf") -> {
                 val text = """
@@ -803,22 +1137,22 @@ object YksGeminiService {
                     2. **Günde 20 Nitelikli Paragraf:** Kronometre tutarak çöz. Soru başına hedef süre: 65 saniye.
                     3. **Yanlış Şıkkı Kanıtla:** 'Bence bu doğru' demek yerine, 'A şıkkı metnin şu cümlesi yüzünden yanlış' diyerek ele.
                 """.trimIndent()
-                text to listOf("Bana Paragraf Sorusu Üret", "Süre Yönetimi Taktikleri", "Diğer Dersleri Sor")
+                text to listOf("Paragraf Rutini Ekle", "Süre Yönetimi Taktikleri", "Diğer Dersleri Sor")
             }
             else -> {
                 val text = """
-                    Merhaba geleceğin şampiyonu! 🚀
+                    Merhaba! Ben senin **NöroRoutine Akıllı Ders & Sınav Koçunum.** 🎯
                     
-                    Ben senin **2028 YKS & Türkiye Yüzyılı Maarif Modeli** çalışma koçunum.
+                    Senin eklediğin rutinleri, haftalık analizlerini ve girdiğin deneme netlerini yakından takip ediyorum.
                     
-                    Bana şunları sorabilirsin:
-                    • Deneme netlerini ve yanlış yaptığın konuları paylaşabilirsin; sana özel eksik haritası ve çalışma programı çıkarırım.
-                    • Maarif modelinde soruların nasıl geleceğini tartışabiliriz.
-                    • İstediğin dersten (Matematik, Türkçe, Fizik vb.) sana özel şıklı yeni nesil sorular hazırlamamı isteyebilirsin.
+                    Birlikte neler yapabiliriz:
+                    • **Rutinlerini Değerlendirelim:** Günlük ders saatlerini ve alışkanlıklarını deneme hedeflerine göre planlayalım.
+                    • **Denemelerini Analiz Edelim:** Ders bazında doğru/yanlış/netlerini konuşup zayıf konulara nokta atışı reçete çıkaralım.
+                    • **Kaynak Tabanlı Quiz:** 'Çalışma' sekmesinde fotoğraf veya not yükleyerek dilediğin sayıda 5 şıklı quiz hazırlatalım.
                     
-                    Bugün neye odaklanmak istersin?
+                    Bugün hangi ders veya konu üzerine konuşmak istersin?
                 """.trimIndent()
-                text to listOf("2028 Maarif Modeli Nedir?", "Denememi Analiz Et", "Yeni Nesil Soru Çöz")
+                text to listOf("Rutinlerime Göre Plan Yap", "Denemelerimi Analiz Et", "Yeni Çalışma Başlat")
             }
         }
 
@@ -827,6 +1161,112 @@ object YksGeminiService {
             text = reply,
             suggestedChips = chips
         )
+    }
+
+    /**
+     * Fallback generator for Study section quizzes (5 options: A, B, C, D, E with hints)
+     */
+    private fun generateFallbackStudyQuiz(
+        description: String,
+        count: Int,
+        docText: String?
+    ): List<QuizQuestion> {
+        val lower = (description + " " + (docText ?: "")).lowercase()
+        val allQuestions = mutableListOf<QuizQuestion>()
+
+        if (lower.contains("fiz") || lower.contains("hız") || lower.contains("kuvvet") || lower.contains("hareket")) {
+            allQuestions.add(
+                QuizQuestion(
+                    subject = "Fizik",
+                    topic = "Doğrusal Hareket ve Hız-Zaman Grafikleri",
+                    questionText = "Doğrusal bir ray üzerinde duruştan harekete geçen bir trenin ivmesi ilk 5 saniye boyunca a = 2 m/s²'dir. Sonraki 5 saniye boyunca hızını koruyarak sabit hızla ilerlemektedir. Trenin 10 saniye sonundaki toplam yer değiştirmesi kaç metredir? (v₀ = 0)",
+                    options = listOf("A) 50 m", "B) 75 m", "C) 100 m", "D) 125 m", "E) 150 m"),
+                    correctOptionIndex = 1,
+                    explanation = "0-5 sn arasında son hız v = a·t = 2·5 = 10 m/s. Üçgen alanı: (5·10)/2 = 25 m. 5-10 sn arasında dikdörtgen alanı: 5·10 = 50 m. Toplam yer değiştirme = 25 + 50 = 75 m.",
+                    skillType = "Grafik Yorumlama ve Matematiksel Modelleme",
+                    hints = listOf("İpucu: Hız-zaman grafiğinin altındaki alan yer değiştirmeyi verir. 0-5 sn arasını üçgen, 5-10 sn arasını dikdörtgen olarak hesapla.")
+                )
+            )
+            allQuestions.add(
+                QuizQuestion(
+                    subject = "Fizik",
+                    topic = "Newton'un Hareket Yasaları",
+                    questionText = "Yatay sürtünmeli bir yolda duran 2 kg kütleli bir cisme yatay 18 N büyüklüğünde bir kuvvet uygulanıyor. Zeminle cisim arasındaki sürtünme katsayısı k = 0.4 olduğuna göre cismin ivmesi kaç m/s² olur? (g = 10 m/s²)",
+                    options = listOf("A) 3.0", "B) 4.0", "C) 5.0", "D) 6.0", "E) 8.0"),
+                    correctOptionIndex = 2,
+                    explanation = "Sürtünme kuvveti Fs = k·m·g = 0.4 · 2 · 10 = 8 N. Net kuvvet Fnet = 18 - 8 = 10 N. İvme a = Fnet / m = 10 / 2 = 5.0 m/s².",
+                    skillType = "Sebep-Sonuç İlişkisi Kurma",
+                    hints = listOf("İpucu: Önce cismin ağırlığından sürtünme kuvvetini bul, ardından Fnet = m · a formülünü uygula.")
+                )
+            )
+        }
+
+        if (lower.contains("kimya") || lower.contains("mol") || lower.contains("entalpi") || lower.contains("enerji")) {
+            allQuestions.add(
+                QuizQuestion(
+                    subject = "Kimya",
+                    topic = "Tepkimelerde Enerji ve Entalpi",
+                    questionText = "Bir kimyasal tepkimenin potansiyel enerji diyagramında girenlerin enerjisi 60 kJ, aktifleşmiş kompleksin enerjisi 150 kJ ve ürünlerin enerjisi 20 kJ'dir. Bu tepkimenin geri aktifleşme enerjisi (Eag) ve entalpi değişimi (ΔH) aşağıdakilerden hangisinde doğru verilmiştir?",
+                    options = listOf(
+                        "A) Eag = 90 kJ, ΔH = -40 kJ",
+                        "B) Eag = 130 kJ, ΔH = -40 kJ",
+                        "C) Eag = 130 kJ, ΔH = +40 kJ",
+                        "D) Eag = 90 kJ, ΔH = +40 kJ",
+                        "E) Eag = 150 kJ, ΔH = -60 kJ"
+                    ),
+                    correctOptionIndex = 1,
+                    explanation = "Eag = Eaktifleşmiş - Eürünler = 150 - 20 = 130 kJ. ΔH = Eürünler - Egirenler = 20 - 60 = -40 kJ (Ekzotermik).",
+                    skillType = "Veri Analizi ve Model Kurma",
+                    hints = listOf("İpucu: Geri aktifleşme enerjisi tepe noktası ile ürünlerin enerjisi arasındaki farktır.")
+                )
+            )
+        }
+
+        // Generic / Math fallback questions to satisfy requested question count
+        allQuestions.add(
+            QuizQuestion(
+                subject = "Matematik",
+                topic = "Parabol ve Fonksiyon Modelleme",
+                questionText = "f(x) = -x² + 6x - 5 fonksiyonunun tepe noktasının koordinatları (r, k) aşağıdakilerden hangisidir?",
+                options = listOf("A) (3, 4)", "B) (3, -4)", "C) (-3, 4)", "D) (2, 3)", "E) (4, 3)"),
+                correctOptionIndex = 0,
+                explanation = "r = -b / (2a) = -6 / (2 · -1) = 3. k = f(3) = -(3)² + 6·3 - 5 = -9 + 18 - 5 = 4. Tepe noktası T(3, 4)'tür.",
+                skillType = "Analitik Muhakeme",
+                hints = listOf("İpucu: Parabolün tepe noktası apsisi r = -b / (2a) formülüyle bulunur.")
+            )
+        )
+        allQuestions.add(
+            QuizQuestion(
+                subject = "Matematik",
+                topic = "Yeni Nesil Problem Modelleme",
+                questionText = "Bir öğrenci her gün bir önceki gün çözdüğü soru sayısının 10 fazlasını çözmektedir. 1. gün 25 soru çözen bu öğrenci 6. günün sonunda toplam kaç soru çözmüş olur?",
+                options = listOf("A) 240", "B) 270", "C) 300", "D) 330", "E) 360"),
+                correctOptionIndex = 2,
+                explanation = "Günlük soru sayıları: 25, 35, 45, 55, 65, 75. Toplam = 25 + 35 + 45 + 55 + 65 + 75 = 300 soru.",
+                skillType = "Aritmetik Dizi ve Problem Çözme",
+                hints = listOf("İpucu: Terimleri tek tek yazabilir veya ardışık terimler toplam formülü (İlk + Son) / 2 · Terim Sayısı uygulayabilirsin.")
+            )
+        )
+        allQuestions.add(
+            QuizQuestion(
+                subject = "Türkçe",
+                topic = "Paragrafta Çıkarım ve Anlam",
+                questionText = "Maarif Modeli'nin süreç odaklı eğitim yaklaşımında öğrencinin yalnızca sonuca ulaşması değil, düşünce basamaklarını nasıl inşa ettiği değerlendirilir. Bu parçadan çıkarılabilecek en kapsamlı yargı aşağıdakilerden hangisidir?",
+                options = listOf(
+                    "A) Sonucun doğruluğu değerlendirmede önemsizdir.",
+                    "B) Akıl yürütme ve problem çözme yöntemi, ezberlenmiş cevaptan daha değerlidir.",
+                    "C) Yeni modelde yalnızca teorik dersler işlenir.",
+                    "D) Öğrencilerin sınav stresi tamamen ortadan kalkmıştır.",
+                    "E) Tüm derslerde sadece grup çalışmaları yapılmalıdır."
+                ),
+                correctOptionIndex = 1,
+                explanation = "'Düşünce basamaklarını nasıl inşa ettiği' ifadesi, yöntemin ve akıl yürütme sürecinin cevaptan daha kıymetli olduğunu vurgular.",
+                skillType = "Eleştirel Okuma ve Çıkarım",
+                hints = listOf("İpucu: 'Süreç odaklı' kavramının neyi öncelediğine dikkat et.")
+            )
+        )
+
+        return allQuestions.take(count.coerceAtLeast(1))
     }
 
     private fun generateFallbackQuiz(subject: String, topic: String): List<QuizQuestion> {
