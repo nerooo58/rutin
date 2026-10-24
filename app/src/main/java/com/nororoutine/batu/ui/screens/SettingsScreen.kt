@@ -227,6 +227,144 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
 
+            // Section: Bugün Ekranını Özelleştir (Tablet)
+            item {
+                SectionHeader(title = "Bugün Ekranını Özelleştir", icon = Icons.Rounded.AutoAwesome)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(GlassCardBackground)
+                        .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Tablet Görünümü Seçenekleri",
+                                color = AccentTeal,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(AccentPurple.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Sadece Tablet",
+                                    color = AccentPurple,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        // Toggle 1: Hava Durumu
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Hava Durumu",
+                                    color = PureWhite,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Bugün ekranında anlık hava durumu ve konumu göster",
+                                    color = SubtitleWhite,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = uiState.showTabletWeather,
+                                onCheckedChange = { viewModel.setTabletWeatherEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = PureWhite,
+                                    checkedTrackColor = AccentTeal,
+                                    uncheckedThumbColor = SubtitleWhite,
+                                    uncheckedTrackColor = ChipUnselectedBg
+                                )
+                            )
+                        }
+
+                        // Toggle 2: Ekran Süresi
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ekran Süresi",
+                                    color = PureWhite,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Bugün ekranında ekran süresi göstergesini göster",
+                                    color = SubtitleWhite,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = uiState.showTabletScreenTime,
+                                onCheckedChange = { viewModel.setTabletScreenTimeEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = PureWhite,
+                                    checkedTrackColor = AccentTeal,
+                                    uncheckedThumbColor = SubtitleWhite,
+                                    uncheckedTrackColor = ChipUnselectedBg
+                                )
+                            )
+                        }
+
+                        // Toggle 3: Müzik Kartı
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Müzik Kartı (Sağ Panel)",
+                                    color = PureWhite,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Sağ panelde müzik çalar ve albüm kapağını göster",
+                                    color = SubtitleWhite,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = uiState.showTabletMusicCard,
+                                onCheckedChange = { viewModel.setTabletMusicCardEnabled(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = PureWhite,
+                                    checkedTrackColor = AccentTeal,
+                                    uncheckedThumbColor = SubtitleWhite,
+                                    uncheckedTrackColor = ChipUnselectedBg
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+
             // Section 2: Noro Bağlantısı
             item {
                 SectionHeader(title = "Noro Bağlantısı", icon = Icons.Rounded.AutoAwesome)

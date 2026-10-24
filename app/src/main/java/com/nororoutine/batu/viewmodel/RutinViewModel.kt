@@ -44,7 +44,10 @@ data class RutinUiState(
     val isFirebaseConnected: Boolean = true,
     val lastSyncText: String = "Gerçek zamanlı bağlı",
     val shakeRoutineId: String? = null,
-    val shakeTrigger: Int = 0
+    val shakeTrigger: Int = 0,
+    val showTabletWeather: Boolean = true,
+    val showTabletScreenTime: Boolean = true,
+    val showTabletMusicCard: Boolean = true
 )
 
 class RutinViewModel(
@@ -54,6 +57,21 @@ class RutinViewModel(
     val uiState: StateFlow<RutinUiState> = _uiState.asStateFlow()
 
     init {
+        // Load tablet customization preferences
+        try {
+            val tabletPrefs = NoroRoutineApp.instance.getSharedPreferences("tablet_customization_prefs", Context.MODE_PRIVATE)
+            val showWeather = tabletPrefs.getBoolean("show_tablet_weather", true)
+            val showScreenTime = tabletPrefs.getBoolean("show_tablet_screen_time", true)
+            val showMusicCard = tabletPrefs.getBoolean("show_tablet_music_card", true)
+            _uiState.update {
+                it.copy(
+                    showTabletWeather = showWeather,
+                    showTabletScreenTime = showScreenTime,
+                    showTabletMusicCard = showMusicCard
+                )
+            }
+        } catch (_: Exception) {}
+
         // Start real-time Firestore listeners on launch
         observeFirestoreData()
     }
@@ -666,6 +684,30 @@ class RutinViewModel(
                 lastSync = Timestamp.now()
             )
         )
+    }
+
+    fun setTabletWeatherEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(showTabletWeather = enabled) }
+        try {
+            NoroRoutineApp.instance.getSharedPreferences("tablet_customization_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("show_tablet_weather", enabled).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun setTabletScreenTimeEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(showTabletScreenTime = enabled) }
+        try {
+            NoroRoutineApp.instance.getSharedPreferences("tablet_customization_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("show_tablet_screen_time", enabled).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun setTabletMusicCardEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(showTabletMusicCard = enabled) }
+        try {
+            NoroRoutineApp.instance.getSharedPreferences("tablet_customization_prefs", Context.MODE_PRIVATE)
+                .edit().putBoolean("show_tablet_music_card", enabled).apply()
+        } catch (_: Exception) {}
     }
 
     fun resetAllData() {

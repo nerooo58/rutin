@@ -44,8 +44,6 @@ import com.nororoutine.batu.ui.theme.GlassCardBorderSubtle
 import com.nororoutine.batu.ui.theme.PureWhite
 import com.nororoutine.batu.ui.theme.SubtitleWhite
 
-import androidx.compose.material.icons.rounded.School
-
 data class TabItem(
     val title: String,
     val icon: ImageVector
@@ -54,7 +52,6 @@ data class TabItem(
 val RUTIN_TABS = listOf(
     TabItem("Bugün", Icons.Rounded.Schedule),
     TabItem("Düzenle", Icons.Rounded.Edit),
-    TabItem("Ders", Icons.Rounded.School),
     TabItem("Geçmiş", Icons.Rounded.CalendarMonth),
     TabItem("Ayarlar", Icons.Rounded.Settings)
 )

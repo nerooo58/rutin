@@ -164,21 +164,17 @@ fun MainScreen(
                         0 -> TodayScreen(
                             viewModel = viewModel,
                             uiState = uiState,
-                            onNavigateToEdit = { viewModel.selectTab(1) },
-                            onNavigateToYksCoach = { viewModel.selectTab(2) }
+                            onNavigateToEdit = { viewModel.selectTab(1) }
                         )
                         1 -> EditScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )
-                        2 -> com.nororoutine.batu.ui.screens.YksCoachScreen(
-                            rutinViewModel = viewModel
-                        )
-                        3 -> HistoryScreen(
+                        2 -> HistoryScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )
-                        4 -> SettingsScreen(
+                        3 -> SettingsScreen(
                             viewModel = viewModel,
                             uiState = uiState
                         )

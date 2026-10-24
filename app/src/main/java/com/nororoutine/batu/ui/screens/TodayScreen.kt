@@ -61,7 +61,6 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Smartphone
@@ -153,13 +152,13 @@ fun TodayScreen(
     viewModel: RutinViewModel,
     uiState: RutinUiState,
     onNavigateToEdit: () -> Unit,
-    onNavigateToYksCoach: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val today = remember { LocalDate.now() }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isTablet = configuration.smallestScreenWidthDp >= 600 || isLandscape
     val turkishLocale = remember { Locale("tr", "TR") }
 
     // Real-time ticking clock for exact countdown updates
@@ -328,62 +327,29 @@ fun TodayScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (isLandscape) {
-            LandscapeTodayLayout(
-                mainViewState = mainViewState,
-                nowTime = nowLocalTime,
-                dateText = formattedDateFull,
+        if (isTablet) {
+            com.nororoutine.batu.ui.screens.tablet.TabletTodayLayout(
+                viewModel = viewModel,
                 uiState = uiState,
+                today = today,
+                nowTime = nowLocalTime,
                 locationText = locationText,
-                totalTodayRoutines = totalCount,
-                completedTodayRoutines = completedCount,
-                todayPercent = todayPercent,
-                currentStreak = currentStreak,
                 focusedIndex = safeFocusedIndex,
                 onFocusChange = { focusedIndex = it },
-                viewModel = viewModel,
-                today = today,
-                onViewRoutinesClick = { showTodayRoutinesSheet = true },
-                onMarkDone = { routine -> viewModel.markRoutineDone(routine.id, today) },
-                onMarkEmpty = { routine -> viewModel.markRoutineEmpty(routine.id, today) },
-                onOpenNote = { routine -> selectedRoutineForSheet = routine },
-                onOpenInfo = { routine -> infoMenuRoutine = routine },
-                onOpenStoryShare = { showStoryShareSheet = true },
-                onOpenScreenTimeDetail = { showScreenTimeDetailSheet = true }
+                onNavigateToEdit = onNavigateToEdit,
+                onOpenScreenTimeDetail = { showScreenTimeDetailSheet = true },
+                onOpenStoryShare = { showStoryShareSheet = true }
             )
         } else {
-            PortraitTodayLayout(
+            com.nororoutine.batu.ui.screens.phone.PhoneTodayLayout(
+                viewModel = viewModel,
+                uiState = uiState,
+                today = today,
                 nowTime = nowLocalTime,
-                routines = todayRoutines,
+                locationText = locationText,
                 focusedIndex = safeFocusedIndex,
                 onFocusChange = { focusedIndex = it },
-                uiState = uiState,
-                viewModel = viewModel,
-                today = today,
-                locationText = locationText,
-                totalCount = totalCount,
-                completedCount = completedCount,
-                todayPercent = todayPercent,
-                currentStreak = currentStreak,
-                activeRoutine = activeRoutine,
-                approachingOrUpcomingRoutine = approachingOrUpcomingRoutine,
-                upcomingCountdownText = upcomingCountdownText,
-                previousRoutine = previousRoutine,
-                onViewRoutinesClick = { showTodayRoutinesSheet = true },
-                onMarkDone = { routine -> viewModel.markRoutineDone(routine.id, today) },
-                onMarkEmpty = { routine ->
-                    viewModel.markRoutineEmpty(routine.id, today)
-                    if (safeFocusedIndex < todayRoutines.lastIndex) {
-                        focusedIndex = safeFocusedIndex + 1
-                    }
-                },
-                onOpenNote = { routine -> selectedRoutineForSheet = routine },
-                onOpenInfo = { routine -> infoMenuRoutine = routine },
-                onOpenStoryShare = { showStoryShareSheet = true },
-                onOpenScreenTime = { showScreenTimeDetailSheet = true },
-                onOpenMusic = { showMusicSheet = true },
-                onNavigateToEdit = onNavigateToEdit,
-                onNavigateToYksCoach = onNavigateToYksCoach
+                onNavigateToEdit = onNavigateToEdit
             )
         }
 
@@ -558,8 +524,7 @@ fun PortraitTodayLayout(
     onOpenStoryShare: () -> Unit,
     onOpenScreenTime: () -> Unit = {},
     onOpenMusic: () -> Unit = {},
-    onNavigateToEdit: () -> Unit,
-    onNavigateToYksCoach: () -> Unit = {}
+    onNavigateToEdit: () -> Unit
 ) {
     val turkishLocale = remember { Locale("tr", "TR") }
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
@@ -918,32 +883,6 @@ fun PortraitTodayLayout(
                 }
             }
 
-            // 2028 YKS & Maarif Modeli Koç Butonu
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xFF6366F1), Color(0xFF06B6D4))))
-                    .border(1.dp, AccentTeal.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
-                    .clickable { onNavigateToYksCoach() }
-                    .padding(horizontal = 11.dp, vertical = 9.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.School,
-                        contentDescription = "YKS 2028 Koç",
-                        tint = PureWhite,
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Ders",
-                        color = PureWhite,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
             // Paylaşılabilir Hikaye Kartı Butonu
             Box(
                 modifier = Modifier
@@ -974,442 +913,34 @@ fun PortraitTodayLayout(
 }
 
 /**
- * LANDSCAPE (tablet) layout for Today screen
+ * LANDSCAPE (tablet) layout for Today screen - forwarded to TabletTodayLayout
  */
 @Composable
 fun LandscapeTodayLayout(
-    mainViewState: MainViewState,
-    nowTime: LocalTime,
-    dateText: String,
+    viewModel: RutinViewModel,
     uiState: RutinUiState,
+    today: LocalDate,
+    nowTime: LocalTime,
     locationText: String,
-    totalTodayRoutines: Int,
-    completedTodayRoutines: Int,
-    todayPercent: Int,
-    currentStreak: Int,
     focusedIndex: Int,
     onFocusChange: (Int) -> Unit,
-    viewModel: RutinViewModel,
-    today: LocalDate,
-    onViewRoutinesClick: () -> Unit,
-    onMarkDone: (Routine) -> Unit,
-    onMarkEmpty: (Routine) -> Unit,
-    onOpenNote: (Routine) -> Unit,
-    onOpenInfo: (Routine) -> Unit,
+    onNavigateToEdit: () -> Unit = {},
     onOpenStoryShare: () -> Unit,
     onOpenScreenTimeDetail: () -> Unit
 ) {
-    val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
-    val todayRoutines = viewModel.getRoutinesForDay(today)
-
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(20.dp),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val tabletLeftScrollState = rememberScrollState()
-        // Left Side: Time, Date, Weather Card, Music Player & Screen Time Card
-        Column(
-            modifier = Modifier
-                .weight(1.1f)
-                .fillMaxHeight()
-                .verticalScroll(tabletLeftScrollState),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    Text(
-                        text = formattedTime,
-                        color = PureWhite,
-                        fontSize = 42.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1).sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = dateText,
-                        color = SubtitleWhite,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Streak Badge
-                if (currentStreak > 0) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Color(0x33F59E0B))
-                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(999.dp))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "🔥 $currentStreak Gün Seri",
-                            color = Color(0xFFFBBF24),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            // Weather Card with Location
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xF2131D31))
-                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(16.dp))
-                    .padding(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.Thermostat,
-                                contentDescription = null,
-                                tint = AccentTeal,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "${uiState.weatherInfo.temperature.toInt()}°C • ${uiState.weatherInfo.condition.label}",
-                                color = PureWhite,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.LocationOn,
-                                contentDescription = null,
-                                tint = AccentPurple,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = locationText,
-                                color = SubtitleWhite,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-
-                    val completionColor = getCompletionColor(todayPercent, totalTodayRoutines)
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = if (totalTodayRoutines > 0) "%$todayPercent" else "-",
-                            color = completionColor,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = "$completedTodayRoutines / $totalTodayRoutines Tamamlandı",
-                            color = MutedWhite,
-                            fontSize = 10.sp
-                        )
-                    }
-                }
-            }
-
-            // Tablet Music Player & Focus Soundscape Card
-            MusicPlayerCard(
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Tablet Screen Time Card (Tap to open detailed stats)
-            ScreenTimeSummaryCard(
-                onOpenDetail = { onOpenScreenTimeDetail() },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Today's Routine List Preview (Quick Checklist for Tablet)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xE6131D31))
-                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(18.dp))
-                    .padding(14.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Günün Rutinleri",
-                            color = PureWhite,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Paylaş Butonu
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(AccentPurple.copy(alpha = 0.25f))
-                                    .border(1.dp, AccentPurple.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
-                                    .clickable { onOpenStoryShare() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Share,
-                                        contentDescription = "Hikaye Paylaş",
-                                        tint = PureWhite,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Paylaş",
-                                        color = PureWhite,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            // Tümünü Gör Butonu
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(AccentTeal.copy(alpha = 0.22f))
-                                    .border(1.dp, AccentTeal.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
-                                    .clickable { onViewRoutinesClick() }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Text(
-                                        text = "Tümünü Gör",
-                                        color = AccentTeal,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (todayRoutines.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Bugün için rutin planlanmadı.",
-                                color = MutedWhite,
-                                fontSize = 12.sp
-                            )
-                        }
-                    } else {
-                        // Render directly in Column so the entire tablet left column scrolls naturally
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            todayRoutines.forEachIndexed { idx, r ->
-                                val logKey = "${today.format(DateTimeFormatter.ISO_LOCAL_DATE)}_${r.id}"
-                                val isDone = uiState.logs[logKey]?.isDone == true
-                                val timeStr = r.startTime.ifEmpty { r.time }
-
-                                val isSelected = idx == focusedIndex
-                                val rowBg = when {
-                                    isSelected -> Color(0x33A78BFA)
-                                    isDone -> Color(0x2210B981)
-                                    else -> Color(0x14FFFFFF)
-                                }
-                                val rowBorder = when {
-                                    isSelected -> AccentPurple
-                                    isDone -> Color(0xFF10B981).copy(alpha = 0.5f)
-                                    else -> Color(0x1AFFFFFF)
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(rowBg)
-                                        .border(1.dp, rowBorder, RoundedCornerShape(10.dp))
-                                        .clickable { onFocusChange(idx) }
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isDone) Color(0xFF10B981) else Color(0x33FFFFFF))
-                                                .clickable {
-                                                    if (isDone) onMarkEmpty(r) else onMarkDone(r)
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (isDone) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Check,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF0D0B1E),
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = r.name,
-                                                color = if (isDone) MutedWhite else PureWhite,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            if (timeStr.isNotEmpty()) {
-                                                Text(
-                                                    text = timeStr,
-                                                    color = SubtitleWhite,
-                                                    fontSize = 10.sp
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        if (r.isRange) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0x337CF4DE))
-                                                    .border(1.dp, AccentTeal.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = "⏳ ${r.durationMinutes}dk",
-                                                    color = AccentTeal,
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                        }
-
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0x22A78BFA))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = r.category,
-                                                color = AccentPurple,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-
-                                        IconButton(
-                                            onClick = { onOpenInfo(r) },
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0x22FFFFFF))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Info,
-                                                contentDescription = "Rutin Seçenekleri",
-                                                tint = if (r.isRange) AccentTeal else AccentPurple,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Scroll bottom padding so entire list can be viewed comfortably
-            Spacer(modifier = Modifier.height(72.dp))
-        }
-
-        // Right Side: Active / Focused Routine Cards Carousel (kaydırmalı kartlar tıpkı telefondaki gibi)
-        Box(
-            modifier = Modifier
-                .weight(1.15f)
-                .fillMaxHeight(),
-            contentAlignment = Alignment.Center
-        ) {
-            if (todayRoutines.isNotEmpty()) {
-                VerticalRoutineCardStack(
-                    routines = todayRoutines,
-                    focusedIndex = focusedIndex,
-                    nowTime = nowTime,
-                    mainViewState = mainViewState,
-                    viewModel = viewModel,
-                    uiState = uiState,
-                    today = today,
-                    onFocusChange = onFocusChange,
-                    onMarkDone = onMarkDone,
-                    onMarkEmpty = onMarkEmpty,
-                    onOpenDetail = onOpenNote,
-                    onOpenInfo = onOpenInfo,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xF2162035))
-                        .padding(28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Bugün için kayıtlı aktif rutin bulunmuyor.",
-                        color = MutedWhite,
-                        fontSize = 15.sp,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
+    com.nororoutine.batu.ui.screens.tablet.TabletTodayLayout(
+        viewModel = viewModel,
+        uiState = uiState,
+        today = today,
+        nowTime = nowTime,
+        locationText = locationText,
+        focusedIndex = focusedIndex,
+        onFocusChange = onFocusChange,
+        onNavigateToEdit = onNavigateToEdit,
+        onOpenScreenTimeDetail = onOpenScreenTimeDetail,
+        onOpenStoryShare = onOpenStoryShare
+    )
 }
-
 
 /**
  * Vertical Card Stack / Carousel with smooth spring drag physics and solid glass cards.

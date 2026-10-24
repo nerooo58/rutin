@@ -27,7 +27,8 @@ data class DeviceTrack(
     val artist: String,
     val album: String,
     val durationMs: Long,
-    val contentUriString: String
+    val contentUriString: String,
+    val albumId: Long = 0L
 )
 
 object DeviceMusicManager {
@@ -77,7 +78,8 @@ object DeviceMusicManager {
                 MediaStore.Audio.Media.TITLE,
                 MediaStore.Audio.Media.ARTIST,
                 MediaStore.Audio.Media.ALBUM,
-                MediaStore.Audio.Media.DURATION
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.ALBUM_ID
             )
             // Filter music tracks longer than 10 seconds to exclude notification beeps
             val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 10000"
@@ -98,6 +100,7 @@ object DeviceMusicManager {
                     val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                     val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                     val durCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                    val albumIdCol = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
 
                     while (c.moveToNext()) {
                         val id = c.getLong(idCol)
@@ -106,6 +109,7 @@ object DeviceMusicManager {
                         val artist = if (artistRaw == null || artistRaw == "<unknown>") "Bilinmeyen Sanatçı" else artistRaw
                         val album = c.getString(albumCol) ?: ""
                         val duration = c.getLong(durCol)
+                        val albumId = if (albumIdCol >= 0) c.getLong(albumIdCol) else 0L
                         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
 
                         list.add(
@@ -115,7 +119,8 @@ object DeviceMusicManager {
                                 artist = artist,
                                 album = album,
                                 durationMs = duration,
-                                contentUriString = uri.toString()
+                                contentUriString = uri.toString(),
+                                albumId = albumId
                             )
                         )
                     }
