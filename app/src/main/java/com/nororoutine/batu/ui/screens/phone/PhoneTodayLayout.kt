@@ -507,10 +507,17 @@ private fun PhoneActiveRoutineCard(
     val currentLog = uiState.logs[todayDateKey]
     val isDone = currentLog?.isDone == true
 
-    // Persistent Focus Manager Timer State
-    var isTimerRunning by remember(routine.id) { mutableStateOf(false) }
+    // Persistent Focus Manager Timer State (Başlatılınca arka planda ve geçişlerde durmaz)
+    var isTimerRunning by remember(routine.id) {
+        mutableStateOf(PersistentFocusManager.isRunning(context, routine.id))
+    }
     var timerSeconds by remember(routine.id) {
         mutableIntStateOf(PersistentFocusManager.getElapsedSeconds(context, routine.id))
+    }
+
+    LaunchedEffect(routine.id) {
+        isTimerRunning = PersistentFocusManager.isRunning(context, routine.id)
+        timerSeconds = PersistentFocusManager.getElapsedSeconds(context, routine.id)
     }
 
     LaunchedEffect(routine.id, isTimerRunning) {
@@ -518,13 +525,42 @@ private fun PhoneActiveRoutineCard(
             while (true) {
                 delay(1000L)
                 timerSeconds = PersistentFocusManager.getElapsedSeconds(context, routine.id)
+                if (!PersistentFocusManager.isRunning(context, routine.id)) {
+                    isTimerRunning = false
+                    break
+                }
             }
+        } else {
+            timerSeconds = PersistentFocusManager.getElapsedSeconds(context, routine.id)
         }
     }
 
-    // Rutine Özel Not Alanı
-    var noteText by remember(routine.id, currentLog?.note) {
-        mutableStateOf(currentLog?.note.orEmpty())
+    // Rutine Özel Not Alanı (Tuş basımlarında donma/karışma yapmaz, kalıcı olarak saklanır)
+    val savedDbNote = currentLog?.note.orEmpty()
+    var noteText by remember(routine.id) { mutableStateOf(savedDbNote) }
+    var isEditingNote by remember(routine.id) { mutableStateOf(false) }
+    var isSavedRecently by remember(routine.id) { mutableStateOf(false) }
+
+    LaunchedEffect(routine.id, savedDbNote) {
+        if (!isEditingNote) {
+            noteText = savedDbNote
+        }
+    }
+
+    LaunchedEffect(isSavedRecently) {
+        if (isSavedRecently) {
+            delay(2500L)
+            isSavedRecently = false
+        }
+    }
+
+    // Rutin değiştiğinde veya ekrandan çıkıldığında otomatik arka plan güvenli kaydı
+    DisposableEffect(routine.id) {
+        onDispose {
+            if (noteText != savedDbNote) {
+                viewModel.updateRoutineNote(routine.id, today, noteText)
+            }
+        }
     }
 
     // Alt Rutin Ekleme
@@ -668,12 +704,13 @@ private fun PhoneActiveRoutineCard(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
 
-                            val mins = timerSeconds / 60
+                            val hours = timerSeconds / 3600
+                            val mins = (timerSeconds % 3600) / 60
                             val secs = timerSeconds % 60
                             Text(
-                                text = "%02d:%02d".format(mins, secs),
+                                text = "%02d:%02d:%02d".format(hours, mins, secs),
                                 color = theme.accentColor,
-                                fontSize = 24.sp,
+                                fontSize = 21.sp,
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 1.sp
@@ -907,10 +944,10 @@ private fun PhoneActiveRoutineCard(
                     }
                 }
 
-                // 4. O RUTİNE ÖZEL NOT ALANI
+                // 4. O RUTİNE ÖZEL NOT ALANI (KAYDET & DÜZENLE BUTONLARIYLA KALICI VE KESİNTİSİZ)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -922,7 +959,7 @@ private fun PhoneActiveRoutineCard(
                                 imageVector = Icons.Rounded.EditNote,
                                 contentDescription = null,
                                 tint = theme.accentColor,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -931,41 +968,168 @@ private fun PhoneActiveRoutineCard(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                            if (isSavedRecently) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "✓ Kaydedildi",
+                                    color = DoneGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
-                        if (noteText.isNotBlank()) {
-                            Text(
-                                text = "Otomatik kaydedilir",
-                                color = SubtitleWhite,
-                                fontSize = 10.sp
-                            )
+
+                        // Düzenle veya Kaydet / Vazgeç Butonları
+                        if (isEditingNote) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Vazgeç",
+                                    color = SubtitleWhite,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            noteText = savedDbNote
+                                            isEditingNote = false
+                                        }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.updateRoutineNote(routine.id, today, noteText)
+                                        isEditingNote = false
+                                        isSavedRecently = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = DoneGreen),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = "Kaydet",
+                                        tint = PureWhite,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Kaydet",
+                                        color = PureWhite,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0x22FFFFFF))
+                                    .clickable { isEditingNote = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Edit,
+                                    contentDescription = "Düzenle",
+                                    tint = theme.accentColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (noteText.isBlank()) "+ Not Ekle" else "Düzenle",
+                                    color = theme.accentColor,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
 
-                    OutlinedTextField(
-                        value = noteText,
-                        onValueChange = { newNote ->
-                            noteText = newNote
-                            viewModel.updateRoutineNote(routine.id, today, newNote)
-                        },
-                        placeholder = {
-                            Text(
-                                text = "Bu rutine özel not ekleyin...",
-                                color = SubtitleWhite,
-                                fontSize = 11.sp
+                    if (isEditingNote) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = noteText,
+                                onValueChange = { noteText = it },
+                                placeholder = {
+                                    Text(
+                                        text = "Bu rutine dair notunuzu buraya yazın...",
+                                        color = SubtitleWhite,
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(78.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = theme.accentColor,
+                                    unfocusedBorderColor = Color(0x44FFFFFF),
+                                    focusedTextColor = PureWhite,
+                                    unfocusedTextColor = PureWhite,
+                                    cursorColor = theme.accentColor
+                                ),
+                                shape = RoundedCornerShape(10.dp)
                             )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = theme.accentColor,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
-                            focusedTextColor = PureWhite,
-                            unfocusedTextColor = PureWhite,
-                            cursorColor = theme.accentColor
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+
+                            Button(
+                                onClick = {
+                                    viewModel.updateRoutineNote(routine.id, today, noteText)
+                                    isEditingNote = false
+                                    isSavedRecently = true
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = DoneGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    tint = PureWhite,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Notu Kaydet",
+                                    color = PureWhite,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0x330D0B1E))
+                                .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+                                .clickable { isEditingNote = true }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        ) {
+                            if (noteText.isNotBlank()) {
+                                Text(
+                                    text = noteText,
+                                    color = PureWhite,
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp
+                                )
+                            } else {
+                                Text(
+                                    text = "Henüz bir not yazılmadı. Not eklemek veya düzenlemek için dokunun.",
+                                    color = MutedWhite,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1062,6 +1226,7 @@ private fun PhoneMusicStrip(
     val tracks by DeviceMusicManager.tracks.collectAsState()
     val trackIndex by DeviceMusicManager.currentTrackIndex.collectAsState()
     val isPlaying by DeviceMusicManager.isPlaying.collectAsState()
+    val currentPositionMs by DeviceMusicManager.currentPositionMs.collectAsState()
 
     LaunchedEffect(Unit) {
         DeviceMusicManager.refreshDeviceTracks(context)
@@ -1083,6 +1248,15 @@ private fun PhoneMusicStrip(
         }
     }
 
+    val durationMs = currentTrack?.durationMs ?: 0L
+    val timeFormatted = remember(currentPositionMs, durationMs) {
+        if (durationMs > 0) {
+            "${DeviceMusicManager.formatTime(currentPositionMs)} / ${DeviceMusicManager.formatTime(durationMs)}"
+        } else {
+            DeviceMusicManager.formatTime(currentPositionMs)
+        }
+    }
+
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -1095,18 +1269,9 @@ private fun PhoneMusicStrip(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Küçük Albüm Kapağı + Şarkı Adı + Sanatçı (Tıklanınca Spotify'da çalar/açar)
+            // Küçük Albüm Kapağı + Şarkı Adı + Sanatçı + Dakika (Asla dış uygulama açmaz, saf arka plan kontrolü)
             Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable {
-                        if (currentTrack != null) {
-                            DeviceMusicManager.launchSpotifyTrack(context, currentTrack)
-                        } else {
-                            DeviceMusicManager.openMusicApp(context)
-                        }
-                    },
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Küçük Albüm Kapağı (Spotify veya Cihaz Medyası)
@@ -1120,7 +1285,7 @@ private fun PhoneMusicStrip(
                     if (coverModel != null) {
                         AsyncImage(
                             model = coverModel,
-                            contentDescription = "Spotify Albüm Kapağı",
+                            contentDescription = "Albüm Kapağı",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -1138,34 +1303,42 @@ private fun PhoneMusicStrip(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = currentTrack?.title ?: "Müzik / Odak Sesi",
+                        text = currentTrack?.title ?: if (isPlaying) "Arka Plan Medyası" else "Müzik / Odak Sesi",
                         color = PureWhite,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF1DB954))
+                                .background(if (isPlaying) Color(0xFF1DB954) else SubtitleWhite)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${currentTrack?.artist ?: "Spotify"} • Spotify'da Aç",
-                            color = Color(0xFF1DB954),
+                            text = currentTrack?.artist ?: "Cihaz Medyası",
+                            color = SubtitleWhite,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "• $timeFormatted",
+                            color = Color(0xFF1DB954),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             }
 
-            // Oynatma Kontrolleri (Geri, Oynat/Durdur, İleri) — Ses Kontrolü YOK
+            // Oynatma Kontrolleri (Geri, Oynat/Durdur, İleri) — Arka planda donanım medya tuşları ile kontrol eder
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)

@@ -504,16 +504,19 @@ class RutinViewModel(
     fun updateRoutineNote(routineId: String, date: LocalDate, note: String) {
         val dateString = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         val key = "${dateString}_${routineId}"
-        val currentLog = _uiState.value.logs[key] ?: RoutineLog(
-            id = key,
-            routineId = routineId,
-            date = dateString,
-            status = "done",
-            note = note,
-            completedAt = Timestamp.now()
-        )
-
-        val updatedLog = currentLog.copy(note = note, completedAt = Timestamp.now())
+        val existingLog = _uiState.value.logs[key]
+        val updatedLog = if (existingLog != null) {
+            existingLog.copy(note = note)
+        } else {
+            RoutineLog(
+                id = key,
+                routineId = routineId,
+                date = dateString,
+                status = "empty",
+                note = note,
+                completedAt = null
+            )
+        }
         val updatedLogs = _uiState.value.logs + (key to updatedLog)
 
         _uiState.update { state ->
@@ -522,7 +525,6 @@ class RutinViewModel(
 
         // Persist immediately to Firestore
         repository.saveLog(updatedLog)
-        recalculateAndSaveStats(_uiState.value.routines, updatedLogs)
     }
 
     fun addSubtask(routineId: String, subtaskText: String) {

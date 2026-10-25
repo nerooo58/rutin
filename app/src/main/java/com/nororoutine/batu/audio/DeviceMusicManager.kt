@@ -332,7 +332,8 @@ object DeviceMusicManager {
     }
 
     /**
-     * Plays a track. If it's a Spotify track or external media, launches Spotify/Media Player.
+     * Plays a track. If it's a local media file, plays via MediaPlayer.
+     * Never opens external applications.
      */
     fun playTrack(context: Context, index: Int) {
         val list = _tracks.value
@@ -341,10 +342,13 @@ object DeviceMusicManager {
         _currentTrackIndex.value = index
         val track = list[index]
 
-        if (track.isSpotify || !track.spotifyUri.isNullOrBlank()) {
-            // Launch directly in Spotify!
-            launchSpotifyTrack(context, track)
+        if (track.isSpotify || !track.contentUriString.startsWith("content://")) {
+            // Background control via media keys (no external app launched)
             _isPlaying.value = true
+            _currentPositionMs.value = 0L
+            startProgressTracker()
+            dispatchMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY)
+            dispatchSpotifyMediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY)
             return
         }
 
@@ -377,16 +381,13 @@ object DeviceMusicManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error playing local track: ${track.title}", e)
             _isPlaying.value = false
-            // Fallback: Launch in Spotify or default music app
-            launchSpotifyTrack(context, track)
         }
     }
 
     /**
      * Toggles play/pause:
-     * - If local MediaPlayer is active, toggles it.
-     * - Dispatches media play/pause key to Spotify & system.
-     * - If Spotify isn't playing, opens Spotify directly to start music!
+     * Controls device media playback in the background silently.
+     * Never launches Spotify or any external app.
      */
     fun togglePlayPause(context: Context) {
         ensureSpotifyReceiver(context)
@@ -405,20 +406,16 @@ object DeviceMusicManager {
             return
         }
 
-        val current = getCurrentTrack()
         val willPlay = !_isPlaying.value
         _isPlaying.value = willPlay
 
-        // Send hardware media key to active audio session (Spotify)
-        dispatchMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-
-        // Also broadcast specifically to Spotify
-        dispatchSpotifyMediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-
-        // If user wants to start playing and nothing was playing yet, launch Spotify with the current track
-        if (willPlay && current != null) {
-            launchSpotifyTrack(context, current)
+        if (willPlay) {
+            startProgressTracker()
         }
+
+        // Send hardware media key silently to active audio player (Spotify / device media)
+        dispatchMediaKey(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        dispatchSpotifyMediaButton(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
     }
 
     fun nextTrack(context: Context) {
@@ -427,9 +424,8 @@ object DeviceMusicManager {
             val nextIdx = (_currentTrackIndex.value + 1) % list.size
             _currentTrackIndex.value = nextIdx
             val track = list[nextIdx]
-            if (track.isSpotify) {
-                launchSpotifyTrack(context, track)
-            } else if (mediaPlayer != null) {
+            _currentPositionMs.value = 0L
+            if (mediaPlayer != null && !track.isSpotify) {
                 playTrack(context, nextIdx)
             }
         }
@@ -443,9 +439,8 @@ object DeviceMusicManager {
             val prevIdx = if (_currentTrackIndex.value - 1 < 0) list.size - 1 else _currentTrackIndex.value - 1
             _currentTrackIndex.value = prevIdx
             val track = list[prevIdx]
-            if (track.isSpotify) {
-                launchSpotifyTrack(context, track)
-            } else if (mediaPlayer != null) {
+            _currentPositionMs.value = 0L
+            if (mediaPlayer != null && !track.isSpotify) {
                 playTrack(context, prevIdx)
             }
         }
@@ -560,12 +555,22 @@ object DeviceMusicManager {
         progressJob?.cancel()
         progressJob = scope.launch {
             while (isActive && _isPlaying.value) {
-                mediaPlayer?.let { mp ->
+                val mp = mediaPlayer
+                if (mp != null) {
                     if (mp.isPlaying) {
                         _currentPositionMs.value = mp.currentPosition.toLong()
                     }
+                } else {
+                    val track = getCurrentTrack()
+                    val total = track?.durationMs ?: 0L
+                    if (total > 0) {
+                        val next = _currentPositionMs.value + 1000L
+                        _currentPositionMs.value = if (next >= total) 0L else next
+                    } else {
+                        _currentPositionMs.value = _currentPositionMs.value + 1000L
+                    }
                 }
-                delay(500L)
+                delay(1000L)
             }
         }
     }

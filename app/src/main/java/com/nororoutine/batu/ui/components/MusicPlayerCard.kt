@@ -171,21 +171,20 @@ fun MusicPlayerCard(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x2210B981))
-                            .clickable { DeviceMusicManager.openMusicApp(context) }
+                            .background(if (isPlaying) Color(0x2210B981) else Color(0x22FFFFFF))
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Rounded.OpenInNew,
-                                contentDescription = "Uygulamayı Aç",
-                                tint = Color(0xFF34D399),
-                                modifier = Modifier.size(12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isPlaying) Color(0xFF34D399) else SubtitleWhite)
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Uygulama",
-                                color = Color(0xFF34D399),
+                                text = if (isPlaying) "Çalıyor" else "Durduruldu",
+                                color = if (isPlaying) Color(0xFF34D399) else SubtitleWhite,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
