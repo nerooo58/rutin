@@ -286,22 +286,24 @@ fun SubtasksBottomSheet(
 
             // Add new subtask row
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0x33101C30))
+                    .border(1.dp, GlassCardBorderSubtle, RoundedCornerShape(12.dp))
+                    .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
+                androidx.compose.foundation.text.BasicTextField(
                     value = newSubtaskText,
                     onValueChange = { newSubtaskText = it },
-                    placeholder = {
-                        Text(
-                            text = "Yeni alt adım (örn: 10 dk esneme)",
-                            color = MutedWhite,
-                            fontSize = 13.sp
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = PureWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = {
@@ -312,19 +314,23 @@ fun SubtasksBottomSheet(
                             }
                         }
                     ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccentTeal,
-                        unfocusedBorderColor = GlassCardBorderSubtle,
-                        focusedTextColor = PureWhite,
-                        unfocusedTextColor = PureWhite,
-                        focusedContainerColor = Color(0x33101C30),
-                        unfocusedContainerColor = Color(0x22101C30)
-                    )
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(AccentTeal),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    decorationBox = { innerTextField ->
+                        if (newSubtaskText.isEmpty()) {
+                            Text(
+                                text = "Yeni alt adım (örn: 10 dk esneme)...",
+                                color = MutedWhite,
+                                fontSize = 12.sp
+                            )
+                        }
+                        innerTextField()
+                    }
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Button(
+                IconButton(
                     onClick = {
                         if (newSubtaskText.isNotBlank()) {
                             onAddSubtask(newSubtaskText)
@@ -332,15 +338,16 @@ fun SubtasksBottomSheet(
                             focusManager.clearFocus()
                         }
                     },
-                    modifier = Modifier.size(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentTeal)
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AccentTeal)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
                         contentDescription = "Ekle",
                         tint = Color(0xFF0F172A),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

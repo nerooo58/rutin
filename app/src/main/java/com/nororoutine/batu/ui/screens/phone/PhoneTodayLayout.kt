@@ -744,10 +744,10 @@ private fun PhoneActiveRoutineCard(
                     }
                 }
 
-                // 3. ALT RUTİNLERİN ÖZET LİSTESİ (İŞARETLENEBİLİR)
+                // 3. ALT RUTİNLERİN ÖZET LİSTESİ (İŞARETLENEBİLİR & SİLİNEBİLİR)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -761,37 +761,39 @@ private fun PhoneActiveRoutineCard(
                             fontWeight = FontWeight.Bold
                         )
 
-                        IconButton(
-                            onClick = { showAddSubtaskInput = !showAddSubtaskInput },
-                            modifier = Modifier.size(26.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = "Alt Rutin Ekle",
-                                tint = theme.accentColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Text(
+                            text = if (showAddSubtaskInput) "Gizle" else "+ Ekle",
+                            color = theme.accentColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { showAddSubtaskInput = !showAddSubtaskInput }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
                     }
 
+                    // Alt Rutin Ekleme Satırı (Yarım görünme sorunu tamamen giderilmiş ve ferah)
                     if (showAddSubtaskInput) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0x550D0B1E))
+                                .border(1.dp, theme.accentColor.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                                .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            OutlinedTextField(
+                            androidx.compose.foundation.text.BasicTextField(
                                 value = newSubtaskText,
                                 onValueChange = { newSubtaskText = it },
-                                placeholder = { Text("Yeni alt rutin...", color = SubtitleWhite, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f),
                                 singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = theme.accentColor,
-                                    unfocusedBorderColor = Color(0x33FFFFFF),
-                                    focusedTextColor = PureWhite,
-                                    unfocusedTextColor = PureWhite
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = PureWhite,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
                                 ),
-                                shape = RoundedCornerShape(10.dp),
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(
                                     onDone = {
@@ -801,9 +803,23 @@ private fun PhoneActiveRoutineCard(
                                             showAddSubtaskInput = false
                                         }
                                     }
-                                )
+                                ),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(theme.accentColor),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(vertical = 4.dp),
+                                decorationBox = { innerTextField ->
+                                    if (newSubtaskText.isEmpty()) {
+                                        Text(
+                                            text = "Yeni alt rutin yazın...",
+                                            color = SubtitleWhite,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+
                             IconButton(
                                 onClick = {
                                     if (newSubtaskText.isNotBlank()) {
@@ -813,8 +829,8 @@ private fun PhoneActiveRoutineCard(
                                     }
                                 },
                                 modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(theme.primaryColor)
                             ) {
                                 Icon(
@@ -829,40 +845,63 @@ private fun PhoneActiveRoutineCard(
 
                     if (routine.subtasks.isEmpty()) {
                         Text(
-                            text = "Henüz alt rutin eklenmedi.",
+                            text = "Henüz alt rutin eklenmedi. '+ Ekle' ile ekleyebilirsiniz.",
                             color = MutedWhite,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(vertical = 2.dp)
                         )
                     } else {
-                        routine.subtasks.forEach { subtask ->
+                        routine.subtasks.forEachIndexed { index, subtask ->
                             val isSubtaskDone = currentLog?.completedSubtasks?.contains(subtask) == true
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isSubtaskDone) Color(0x1A10B981) else Color(0x1AFFFFFF))
-                                    .clickable {
-                                        viewModel.toggleSubtaskDone(routine.id, subtask, today)
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(start = 8.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = if (isSubtaskDone) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (isSubtaskDone) DoneGreen else SubtitleWhite,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = subtask,
-                                    color = if (isSubtaskDone) MutedWhite else PureWhite,
-                                    fontSize = 12.sp,
-                                    textDecoration = if (isSubtaskDone) TextDecoration.LineThrough else null,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            viewModel.toggleSubtaskDone(routine.id, subtask, today)
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSubtaskDone) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                                        contentDescription = null,
+                                        tint = if (isSubtaskDone) DoneGreen else SubtitleWhite,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = subtask,
+                                        color = if (isSubtaskDone) MutedWhite else PureWhite,
+                                        fontSize = 12.sp,
+                                        textDecoration = if (isSubtaskDone) TextDecoration.LineThrough else null,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                // Alt Rutini Silme Butonu
+                                IconButton(
+                                    onClick = {
+                                        viewModel.removeSubtask(routine.id, index)
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Alt Rutini Sil",
+                                        tint = Color(0xFFF87171).copy(alpha = 0.85f),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1028,12 +1067,16 @@ private fun PhoneMusicStrip(
         DeviceMusicManager.refreshDeviceTracks(context)
     }
 
-    val currentTrack: DeviceTrack? = remember(tracks, trackIndex) {
+    val liveSpotifyTrack by DeviceMusicManager.liveSpotifyTrack.collectAsState()
+
+    val currentTrack: DeviceTrack? = liveSpotifyTrack ?: remember(tracks, trackIndex) {
         DeviceMusicManager.getCurrentTrack()
     }
 
-    val albumArtUri: Uri? = remember(currentTrack) {
-        if (currentTrack != null && currentTrack.albumId > 0) {
+    val coverModel: Any? = remember(currentTrack) {
+        if (!currentTrack?.coverUrl.isNullOrEmpty()) {
+            currentTrack?.coverUrl
+        } else if (currentTrack != null && currentTrack.albumId > 0) {
             ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), currentTrack.albumId)
         } else {
             null
@@ -1052,23 +1095,32 @@ private fun PhoneMusicStrip(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Küçük Albüm Kapağı + Şarkı Adı + Sanatçı
+            // Küçük Albüm Kapağı + Şarkı Adı + Sanatçı (Tıklanınca Spotify'da çalar/açar)
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable {
+                        if (currentTrack != null) {
+                            DeviceMusicManager.launchSpotifyTrack(context, currentTrack)
+                        } else {
+                            DeviceMusicManager.openMusicApp(context)
+                        }
+                    },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Küçük Albüm Kapağı
+                // Küçük Albüm Kapağı (Spotify veya Cihaz Medyası)
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x338B5CF6)),
+                        .background(Color(0x331DB954)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (albumArtUri != null) {
+                    if (coverModel != null) {
                         AsyncImage(
-                            model = albumArtUri,
-                            contentDescription = "Albüm Kapağı",
+                            model = coverModel,
+                            contentDescription = "Spotify Albüm Kapağı",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -1076,7 +1128,7 @@ private fun PhoneMusicStrip(
                         Icon(
                             imageVector = Icons.Rounded.MusicNote,
                             contentDescription = null,
-                            tint = AccentTeal,
+                            tint = Color(0xFF1DB954),
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -1093,13 +1145,23 @@ private fun PhoneMusicStrip(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = currentTrack?.artist ?: "Cihaz Medyası / Spotify",
-                        color = SubtitleWhite,
-                        fontSize = 10.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1DB954))
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${currentTrack?.artist ?: "Spotify"} • Spotify'da Aç",
+                            color = Color(0xFF1DB954),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 

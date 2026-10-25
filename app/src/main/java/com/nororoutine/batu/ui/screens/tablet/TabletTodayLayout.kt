@@ -983,7 +983,7 @@ fun TabletRoutineDetailPanel(
                         )
                     }
                 } else {
-                    subtasks.forEach { subtask ->
+                    subtasks.forEachIndexed { index, subtask ->
                         val isSubtaskDone = completedSubtasks.contains(subtask)
                         Row(
                             modifier = Modifier
@@ -995,57 +995,75 @@ fun TabletRoutineDetailPanel(
                                     if (isSubtaskDone) DoneGreen.copy(alpha = 0.4f) else Color(0x1FFFFFFF),
                                     RoundedCornerShape(10.dp)
                                 )
-                                .clickable {
-                                    viewModel.toggleSubtaskDone(routine.id, subtask, today)
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Checkbox(
-                                checked = isSubtaskDone,
-                                onCheckedChange = {
-                                    viewModel.toggleSubtaskDone(routine.id, subtask, today)
-                                },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = DoneGreen,
-                                    uncheckedColor = SubtitleWhite,
-                                    checkmarkColor = PureWhite
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        viewModel.toggleSubtaskDone(routine.id, subtask, today)
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSubtaskDone,
+                                    onCheckedChange = {
+                                        viewModel.toggleSubtaskDone(routine.id, subtask, today)
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = DoneGreen,
+                                        uncheckedColor = SubtitleWhite,
+                                        checkmarkColor = PureWhite
+                                    )
                                 )
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = subtask,
-                                color = if (isSubtaskDone) MutedWhite else PureWhite,
-                                fontSize = 13.sp,
-                                textDecoration = if (isSubtaskDone) TextDecoration.LineThrough else TextDecoration.None,
-                                modifier = Modifier.weight(1f)
-                            )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = subtask,
+                                    color = if (isSubtaskDone) MutedWhite else PureWhite,
+                                    fontSize = 13.sp,
+                                    textDecoration = if (isSubtaskDone) TextDecoration.LineThrough else TextDecoration.None,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Alt Rutini Silme Butonu
+                            IconButton(
+                                onClick = { viewModel.removeSubtask(routine.id, index) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Alt Rutini Sil",
+                                    tint = Color(0xFFF87171).copy(alpha = 0.85f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
 
-                // Hızlı Alt Rutin Ekleme Satırı
+                // Hızlı Alt Rutin Ekleme Satırı (Tamamen net, ferah ve kesilme yapmayan tasarım)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0x550D0B1E))
+                        .border(1.dp, theme.accentColor.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                        .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedTextField(
+                    androidx.compose.foundation.text.BasicTextField(
                         value = newSubtaskText,
                         onValueChange = { newSubtaskText = it },
-                        placeholder = { Text("Yeni alt rutin yaz...", fontSize = 12.sp, color = SubtitleWhite) },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = theme.accentColor,
-                            unfocusedBorderColor = Color(0x33FFFFFF),
-                            focusedTextColor = PureWhite,
-                            unfocusedTextColor = PureWhite,
-                            cursorColor = theme.accentColor
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = PureWhite,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
                         ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(
                             onDone = {
@@ -1054,7 +1072,21 @@ fun TabletRoutineDetailPanel(
                                     newSubtaskText = ""
                                 }
                             }
-                        )
+                        ),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(theme.accentColor),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 4.dp),
+                        decorationBox = { innerTextField ->
+                            if (newSubtaskText.isEmpty()) {
+                                Text(
+                                    text = "Yeni alt rutin yazın...",
+                                    color = SubtitleWhite,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            innerTextField()
+                        }
                     )
 
                     IconButton(
@@ -1065,15 +1097,15 @@ fun TabletRoutineDetailPanel(
                             }
                         },
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(theme.primaryColor)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Add,
-                            contentDescription = "Ekle",
+                            contentDescription = "Alt Rutin Ekle",
                             tint = PureWhite,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -1237,12 +1269,16 @@ fun TabletMusicCardPanel(
         DeviceMusicManager.refreshDeviceTracks(context)
     }
 
-    val currentTrack: DeviceTrack? = remember(tracks, trackIndex) {
+    val liveSpotifyTrack by DeviceMusicManager.liveSpotifyTrack.collectAsState()
+
+    val currentTrack: DeviceTrack? = liveSpotifyTrack ?: remember(tracks, trackIndex) {
         DeviceMusicManager.getCurrentTrack()
     }
 
-    val albumArtUri: Uri? = remember(currentTrack) {
-        if (currentTrack != null && currentTrack.albumId > 0) {
+    val coverModel: Any? = remember(currentTrack) {
+        if (!currentTrack?.coverUrl.isNullOrEmpty()) {
+            currentTrack?.coverUrl
+        } else if (currentTrack != null && currentTrack.albumId > 0) {
             ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), currentTrack.albumId)
         } else {
             null
@@ -1330,13 +1366,20 @@ fun TabletMusicCardPanel(
                             listOf(Color(0xFF312E81), Color(0xFF0F172A))
                         )
                     )
-                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp)),
+                    .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
+                    .clickable {
+                        if (currentTrack != null) {
+                            DeviceMusicManager.launchSpotifyTrack(context, currentTrack)
+                        } else {
+                            DeviceMusicManager.openMusicApp(context)
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                if (albumArtUri != null) {
+                if (coverModel != null) {
                     AsyncImage(
-                        model = albumArtUri,
-                        contentDescription = "Albüm Kapağı",
+                        model = coverModel,
+                        contentDescription = "Spotify Albüm Kapağı",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
