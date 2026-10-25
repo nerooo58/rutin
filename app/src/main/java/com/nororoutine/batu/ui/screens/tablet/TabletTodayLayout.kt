@@ -920,7 +920,11 @@ fun TabletRoutineDetailPanel(
                         Button(
                             onClick = {
                                 if (isTimerRunning) {
-                                    PersistentFocusManager.pause(context)
+                                    PersistentFocusManager.pause(context, routine.id)
+                                    val elapsed = PersistentFocusManager.getElapsedSeconds(context, routine.id)
+                                    if (elapsed > 0) {
+                                        viewModel.saveFocusSession(routine.id, elapsed, false, "", today)
+                                    }
                                     isTimerRunning = false
                                 } else {
                                     PersistentFocusManager.startOrResume(
@@ -1346,10 +1350,11 @@ fun TabletRoutineDetailPanel(
                 // Tamamla Butonu
                 Button(
                     onClick = {
+                        val elapsed = PersistentFocusManager.getElapsedSeconds(context, routine.id)
                         if (isDone) {
                             viewModel.markRoutineEmpty(routine.id, today)
                         } else {
-                            viewModel.markRoutineDone(routine.id, today)
+                            viewModel.saveFocusSession(routine.id, elapsed.coerceAtLeast(1), true, "", today)
                         }
                     },
                     colors = ButtonDefaults.buttonColors(

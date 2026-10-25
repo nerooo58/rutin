@@ -157,6 +157,7 @@ fun PhoneTodayLayout(
     onNavigateToEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val turkishLocale = remember { Locale("tr", "TR") }
     val formattedTime = remember(nowTime) { nowTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
     val formattedDate = remember(today) {
@@ -314,7 +315,8 @@ fun PhoneTodayLayout(
                     // Tamamla Butonu (Büyük ve tam genişlikte, yeşil)
                     Button(
                         onClick = {
-                            viewModel.markRoutineDone(currentRoutine.id, today)
+                            val elapsed = PersistentFocusManager.getElapsedSeconds(context, currentRoutine.id)
+                            viewModel.saveFocusSession(currentRoutine.id, elapsed.coerceAtLeast(1), true, "", today)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isDone) Color(0xFF059669) else DoneGreen
@@ -725,7 +727,11 @@ private fun PhoneActiveRoutineCard(
                             Button(
                                 onClick = {
                                     if (isTimerRunning) {
-                                        PersistentFocusManager.pause(context)
+                                        PersistentFocusManager.pause(context, routine.id)
+                                        val elapsed = PersistentFocusManager.getElapsedSeconds(context, routine.id)
+                                        if (elapsed > 0) {
+                                            viewModel.saveFocusSession(routine.id, elapsed, false, "", today)
+                                        }
                                         isTimerRunning = false
                                     } else {
                                         PersistentFocusManager.startOrResume(

@@ -47,71 +47,9 @@ object DeviceMusicManager {
 
     private const val TAG = "DeviceMusicManager"
 
-    // Default Curated Spotify Focus & Routine Tracks (Real Spotify CDNs & URIs)
-    private val DEFAULT_SPOTIFY_TRACKS = listOf(
-        DeviceTrack(
-            id = -1L,
-            title = "Weightless (Derin Odak)",
-            artist = "Marconi Union",
-            album = "Ambient Focus",
-            durationMs = 485000L,
-            contentUriString = "spotify:track:6kkwzB6hXLIONkEk9JciA6",
-            albumId = 0L,
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b273574c82b09a4732cb6c138b0f",
-            spotifyUri = "spotify:track:6kkwzB6hXLIONkEk9JciA6",
-            isSpotify = true
-        ),
-        DeviceTrack(
-            id = -2L,
-            title = "Lofi Chill Beats (Sabah Rutini)",
-            artist = "Lofi Fruits Music",
-            album = "Morning Chill & Focus",
-            durationMs = 154000L,
-            contentUriString = "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
-            albumId = 0L,
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b273297a7a13c3aa4dcf3fa98e09",
-            spotifyUri = "spotify:track:0VjIjW4GlUZAMYd2vXMi3b",
-            isSpotify = true
-        ),
-        DeviceTrack(
-            id = -3L,
-            title = "Experience (Verimlilik)",
-            artist = "Ludovico Einaudi",
-            album = "In A Time Lapse",
-            durationMs = 315000L,
-            contentUriString = "spotify:track:1BncfTJAWxWvOTytuqMN4b",
-            albumId = 0L,
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b27341efcbbaebf73cbe1da476a2",
-            spotifyUri = "spotify:track:1BncfTJAWxWvOTytuqMN4b",
-            isSpotify = true
-        ),
-        DeviceTrack(
-            id = -4L,
-            title = "Clair de Lune (Akşam Sakinliği)",
-            artist = "Claude Debussy",
-            album = "Classical Chill",
-            durationMs = 300000L,
-            contentUriString = "spotify:track:6N7gEjfGds24RtFBP7m31t",
-            albumId = 0L,
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b2739a896d8f512ffadff1df9866",
-            spotifyUri = "spotify:track:6N7gEjfGds24RtFBP7m31t",
-            isSpotify = true
-        ),
-        DeviceTrack(
-            id = -5L,
-            title = "Peaceful Piano Meditation",
-            artist = "Relaxing Piano Music",
-            album = "Deep Relaxation",
-            durationMs = 240000L,
-            contentUriString = "spotify:track:1vYxhdCizn0hLd3n4G5FhO",
-            albumId = 0L,
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b2738734268e3dfaa84ee7c0cf59",
-            spotifyUri = "spotify:track:1vYxhdCizn0hLd3n4G5FhO",
-            isSpotify = true
-        )
-    )
 
-    private val _tracks = MutableStateFlow<List<DeviceTrack>>(DEFAULT_SPOTIFY_TRACKS)
+
+    private val _tracks = MutableStateFlow<List<DeviceTrack>>(emptyList())
     val tracks: StateFlow<List<DeviceTrack>> = _tracks.asStateFlow()
 
     private val _currentTrackIndex = MutableStateFlow(0)
@@ -147,7 +85,7 @@ object DeviceMusicManager {
         return if (list.isNotEmpty() && idx in list.indices) {
             list[idx]
         } else {
-            DEFAULT_SPOTIFY_TRACKS.firstOrNull()
+            null
         }
     }
 
@@ -321,12 +259,7 @@ object DeviceMusicManager {
                 Log.e(TAG, "Failed to load device audio tracks from MediaStore", e)
             }
 
-            // If device has no local MP3 tracks, provide curated Spotify tracks
-            if (list.isEmpty()) {
-                _tracks.value = DEFAULT_SPOTIFY_TRACKS
-            } else {
-                _tracks.value = list + DEFAULT_SPOTIFY_TRACKS
-            }
+            _tracks.value = list
             _hasQueriedTracks.value = true
         }
     }
